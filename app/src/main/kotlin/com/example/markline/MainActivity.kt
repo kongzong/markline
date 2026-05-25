@@ -169,8 +169,8 @@ private fun AppNavigation(
                                 selectedIconColor   = MaterialTheme.colorScheme.primary,
                                 selectedTextColor   = MaterialTheme.colorScheme.primary,
                                 indicatorColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         )
                     }

@@ -101,7 +101,7 @@ fun MainScreen(
                         Text(
                             "mark一下，汇聚成line", 
                             fontSize = 11.sp, 
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                     }
                 },
