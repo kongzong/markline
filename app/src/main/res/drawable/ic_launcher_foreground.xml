@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 应用图标前景：定位标记 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,20C43.5,20 35,28.5 35,39C35,52.5 54,72 54,72C54,72 73,52.5 73,39C73,28.5 64.5,20 54,20ZM54,46C50.1,46 47,42.9 47,39C47,35.1 50.1,32 54,32C57.9,32 61,35.1 61,39C61,42.9 57.9,46 54,46Z" />
+</vector>

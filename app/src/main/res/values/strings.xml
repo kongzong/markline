@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MarkLine</string>
+    <string name="app_slogan">Mark一下，自成Line</string>
+    <string name="widget_description">一键签到小组件</string>
+    <string name="checkin_success">已 Mark ✓</string>
+    <string name="tab_mark">Mark</string>
+    <string name="tab_line">Line</string>
+    <string name="tab_settings">设置</string>
+    <string name="notif_channel_id">markline_checkin</string>
+    <string name="notif_channel_name">签到通知</string>
+    <string name="notif_channel_desc">异步记录完成后通知</string>
+</resources>
