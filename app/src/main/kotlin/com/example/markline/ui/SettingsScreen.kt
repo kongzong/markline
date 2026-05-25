@@ -17,16 +17,22 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.markline.domain.Event
+import com.example.markline.domain.EventStore
 import com.example.markline.ui.theme.*
 import com.example.markline.util.SettingsStore
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     settingsStore: SettingsStore,
+    eventStore: EventStore, // 增加参数以支持生成数据
     onBack: () -> Unit = {}
 ) {
+    val scope = rememberCoroutineScope()
     var enableAudio   by remember { mutableStateOf(settingsStore.audioEnabled) }
     var audioDuration by remember { mutableStateOf(settingsStore.audioDurationSec) }
     var enableLocation by remember { mutableStateOf(settingsStore.locationEnabled) }
@@ -116,6 +122,25 @@ fun SettingsScreen(
                 color    = MaterialTheme.colorScheme.outlineVariant
             )
 
+            // ── 调试工具 ──────────────────────────────────
+            SectionHeader("调试工具")
+
+            ArrowItem(
+                icon    = Icons.Outlined.Storage,
+                title   = "生成过去 10 天模拟数据",
+                trailing = "点击生成",
+                onClick = {
+                    scope.launch {
+                        generateMockData(eventStore)
+                    }
+                }
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                color    = MaterialTheme.colorScheme.outlineVariant
+            )
+
             // ── 其他 ──────────────────────────────────────
             SectionHeader("其他")
 
@@ -156,6 +181,33 @@ fun SettingsScreen(
                 showDurationDialog = false
             }
         )
+    }
+}
+
+private fun generateMockData(eventStore: EventStore) {
+    val addresses = listOf("办公大楼", "城市广场", "星巴克咖啡", "健身中心", "家里", "图书馆", "购物中心")
+    val notes = listOf("开会中", "正在休息", "买杯咖啡", "锻炼身体", "阅读书籍", "看场电影", "逛街中")
+
+    for (day in 0..10) {
+        val count = Random.nextInt(1, 4) // 每天生成 1-3 条
+        for (i in 1..count) {
+            val calendar = Calendar.getInstance()
+            calendar.add(Calendar.DAY_OF_YEAR, -day)
+            calendar.set(Calendar.HOUR_OF_DAY, Random.nextInt(8, 22))
+            calendar.set(Calendar.MINUTE, Random.nextInt(0, 59))
+            
+            val timestamp = calendar.timeInMillis
+            val event = Event(
+                createdAt = timestamp,
+                latitude = 39.9 + (Random.nextDouble() * 0.1),
+                longitude = 116.3 + (Random.nextDouble() * 0.1),
+                address = addresses.random(),
+                audioDuration = if (Random.nextBoolean()) Random.nextInt(5000, 30000) else null,
+                note = if (Random.nextBoolean()) notes.random() else null,
+                status = Event.STATUS_DONE
+            )
+            eventStore.insert(event)
+        }
     }
 }
 

@@ -211,6 +211,7 @@ private fun AppNavigation(
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     settingsStore = settingsStore,
+                    eventStore    = eventStore,
                     onBack        = { navController.popBackStack() }
                 )
             }
