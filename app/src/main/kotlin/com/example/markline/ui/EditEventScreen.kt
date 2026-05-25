@@ -34,11 +34,11 @@ import kotlinx.coroutines.launch
  * 记录编辑页
  *
  * 支持手工补足：
- *   - 位置：重新定位 或 手动输入地址
- *   - 录音：重新录音（替换旧录音）
+ *   - 位置：补定位 + 手动输入地址（原始定位存在时不可覆盖）
+ *   - 录音：补录音（原始录音存在时不可覆盖）
  *   - 备注：自由文本
  *
- * Append-only 原则：不修改 created_at，不修改原始坐标（除非用户主动重新定位）
+ * Append-only 原则：created_at / 原始坐标 / 原始录音 均为不可变数据
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,7 +189,7 @@ fun EditEventScreen(
             OutlinedTextField(
                 value         = addrText,
                 onValueChange = { addrText = it },
-                label         = { Text("地址（手动输入或重新定位）") },
+                label         = { Text("地址（可手动修改）") },
                 placeholder   = { Text("如：北京市朝阳区XX路XX号") },
                 modifier      = Modifier.fillMaxWidth(),
                 singleLine    = true,
@@ -222,66 +222,79 @@ fun EditEventScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             } else if (ev.latitude != null) {
-                // 显示原有坐标
-                Text(
-                    text  = "当前坐标：${"%.5f".format(ev.latitude)}, ${"%.5f".format(ev.longitude)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
-                )
+                // 原始定位已存在，不可覆盖
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Gray50, RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.GpsFixed, contentDescription = null,
+                        tint = Gray500, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text  = "已定位：${"%.5f".format(ev.latitude)}, ${"%.5f".format(ev.longitude)}（原始数据不可覆盖）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray500
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // 重新定位按钮
-            OutlinedButton(
-                onClick = {
-                    val hasPerm = ContextCompat.checkSelfPermission(
-                        context, android.Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
+            // 补定位按钮（仅在原始定位不存在时显示）
+            if (ev.latitude == null) {
+                OutlinedButton(
+                    onClick = {
+                        val hasPerm = ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
 
-                    if (!hasPerm) {
-                        scope.launch { snackbarHost.showSnackbar("需要位置权限，请在设置中开启") }
-                        return@OutlinedButton
-                    }
+                        if (!hasPerm) {
+                            scope.launch { snackbarHost.showSnackbar("需要位置权限，请在设置中开启") }
+                            return@OutlinedButton
+                        }
 
-                    if (!isLocating) {
-                        isLocating = true
-                        scope.launch {
-                            try {
-                                val loc = locationService.getCurrentLocation()
-                                if (loc != null) {
-                                    newLat   = loc.latitude
-                                    newLng   = loc.longitude
-                                    if (!loc.address.isNullOrBlank()) {
-                                        addrText = loc.address
+                        if (!isLocating) {
+                            isLocating = true
+                            scope.launch {
+                                try {
+                                    val loc = locationService.getCurrentLocation()
+                                    if (loc != null) {
+                                        newLat   = loc.latitude
+                                        newLng   = loc.longitude
+                                        if (!loc.address.isNullOrBlank()) {
+                                            addrText = loc.address
+                                        }
+                                        snackbarHost.showSnackbar("定位成功")
+                                    } else {
+                                        snackbarHost.showSnackbar("定位失败，请检查 GPS 权限")
                                     }
-                                    snackbarHost.showSnackbar("定位成功")
-                                } else {
-                                    snackbarHost.showSnackbar("定位失败，请检查 GPS 权限")
+                                } finally {
+                                    isLocating = false
                                 }
-                            } finally {
-                                isLocating = false
                             }
                         }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(10.dp),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = Green500),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, Green500)
+                ) {
+                    if (isLocating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color    = Green500,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("定位中…")
+                    } else {
+                        Icon(Icons.Outlined.GpsFixed, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("补定位")
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(10.dp),
-                colors   = ButtonDefaults.outlinedButtonColors(contentColor = Green500),
-                border   = androidx.compose.foundation.BorderStroke(1.dp, Green500)
-            ) {
-                if (isLocating) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color    = Green500,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("定位中…")
-                } else {
-                    Icon(Icons.Outlined.GpsFixed, contentDescription = null,
-                        modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("重新定位")
                 }
             }
 
@@ -299,25 +312,29 @@ fun EditEventScreen(
             val currentAudioFileName = newAudio ?: ev.audioFileName
             if (!currentAudioFileName.isNullOrBlank()) {
                 val dur = (newAudioDur ?: ev.audioDuration)?.let { "${it / 1000}秒" } ?: "--"
+                val isNew = newAudio != null
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            if (newAudio != null) Green500.copy(alpha = 0.06f)
-                            else Gray100.copy(alpha = 0.6f),
+                            if (isNew) Green500.copy(alpha = 0.06f) else Gray50,
                             RoundedCornerShape(8.dp)
                         )
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Outlined.AudioFile, contentDescription = null,
-                        tint = if (newAudio != null) Green500 else Gray400,
+                        tint = if (isNew) Green500 else Gray500,
                         modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text  = if (newAudio != null) "新录音：$dur" else "已有录音：$dur",
+                        text  = when {
+                            isNew                  -> "新录音：$dur"
+                            ev.audioFileName != null -> "已录音：$dur（原始数据不可覆盖）"
+                            else                   -> "已有录音：$dur"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (newAudio != null) Green500 else Gray500
+                        color = if (isNew) Green500 else Gray500
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -330,55 +347,57 @@ fun EditEventScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // 录音按钮
-            val audioDuration = settingsStore.audioDurationSec
-            OutlinedButton(
-                onClick = {
-                    val hasPerm = ContextCompat.checkSelfPermission(
-                        context, android.Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
+            // 补录音按钮（仅在原始录音不存在时显示）
+            if (ev.audioFileName == null) {
+                val audioDuration = settingsStore.audioDurationSec
+                OutlinedButton(
+                    onClick = {
+                        val hasPerm = ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
 
-                    if (!hasPerm) {
-                        scope.launch { snackbarHost.showSnackbar("需要录音权限，请在设置中开启") }
-                        return@OutlinedButton
-                    }
+                        if (!hasPerm) {
+                            scope.launch { snackbarHost.showSnackbar("需要录音权限，请在设置中开启") }
+                            return@OutlinedButton
+                        }
 
-                    if (!isRecording) {
-                        isRecording = true
-                        scope.launch {
-                            try {
-                                val result = audioRecorder.record(audioDuration)
-                                if (result != null) {
-                                    newAudio    = result.fileName
-                                    newAudioDur = result.durationMs
-                                    snackbarHost.showSnackbar("录音完成（${result.durationMs / 1000}秒）")
-                                } else {
-                                    snackbarHost.showSnackbar("录音失败，请检查麦克风权限")
+                        if (!isRecording) {
+                            isRecording = true
+                            scope.launch {
+                                try {
+                                    val result = audioRecorder.record(audioDuration)
+                                    if (result != null) {
+                                        newAudio    = result.fileName
+                                        newAudioDur = result.durationMs
+                                        snackbarHost.showSnackbar("录音完成（${result.durationMs / 1000}秒）")
+                                    } else {
+                                        snackbarHost.showSnackbar("录音失败，请检查麦克风权限")
+                                    }
+                                } finally {
+                                    isRecording = false
                                 }
-                            } finally {
-                                isRecording = false
                             }
                         }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(10.dp),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = Green500),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, Green500)
+                ) {
+                    if (isRecording) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color    = Green500,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("录音中（${audioDuration}秒）…")
+                    } else {
+                        Icon(Icons.Outlined.Mic, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (newAudio != null) "重新录音" else "补录音")
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(10.dp),
-                colors   = ButtonDefaults.outlinedButtonColors(contentColor = Green500),
-                border   = androidx.compose.foundation.BorderStroke(1.dp, Green500)
-            ) {
-                if (isRecording) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color    = Green500,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("录音中（${audioDuration}秒）…")
-                } else {
-                    Icon(Icons.Outlined.Mic, contentDescription = null,
-                        modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (newAudio != null) "重新录音" else "开始录音")
                 }
             }
 
@@ -464,13 +483,16 @@ private suspend fun saveChanges(
     newAudio:    String?,
     newAudioDur: Int?
 ) {
+    // 加载原始记录，用于保护不可变字段
+    val original = eventStore.findById(eventId)
+
     // 更新备注
     if (noteText.isNotBlank()) {
         eventStore.updateNote(eventId, noteText.trim())
     }
 
-    // 更新位置（新定位坐标优先；否则仅更新地址文本）
-    if (newLat != null && newLng != null) {
+    // 更新位置：仅在原始位置不存在时才允许补定位
+    if (original?.latitude == null && newLat != null && newLng != null) {
         eventStore.updateEnhancement(
             id        = eventId,
             latitude  = newLat,
@@ -478,14 +500,15 @@ private suspend fun saveChanges(
             address   = addrText.ifBlank { null }
         )
     } else if (addrText.isNotBlank()) {
+        // 仅更新地址文本（不覆盖坐标）
         eventStore.updateEnhancement(
             id      = eventId,
             address = addrText.trim()
         )
     }
 
-    // 更新录音
-    if (newAudio != null) {
+    // 更新录音：仅在原始录音不存在时才允许补录音
+    if (original?.audioFileName == null && newAudio != null) {
         eventStore.updateEnhancement(
             id            = eventId,
             audioFileName = newAudio,
