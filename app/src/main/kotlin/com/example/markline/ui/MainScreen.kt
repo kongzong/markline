@@ -93,7 +93,7 @@ fun MainScreen(
                 title = {
                     Column {
                         Text("MarkLine", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text("mark一下，汇聚成line", fontSize = 11.sp, color = Gray400)
+                        Text("mark一下，汇聚成line", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 actions = {
@@ -122,7 +122,7 @@ fun MainScreen(
                     modifier = Modifier
                         .size(160.dp)
                         .scale(if (isProcessing) 0.95f else clickScale.value)
-                        .background(if (isProcessing) Gray400 else Green500, CircleShape)
+                        .background(if (isProcessing) MaterialTheme.colorScheme.surfaceVariant else Green500, CircleShape)
                         .clickable(
                             enabled = !isProcessing,
                             interactionSource = remember { MutableInteractionSource() },
@@ -150,7 +150,7 @@ fun MainScreen(
             Text(
                 text = if (isProcessing) "正在补全增强信息..." else "将自动记录时间、位置和录音",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray500
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -229,14 +229,14 @@ private fun triggerCheckin(
 
 @Composable
 private fun StatusChip(icon: ImageVector, label: String, isActive: Boolean = false) {
-    val color = if (isActive) Green500 else Gray400
+    val color = if (isActive) Green500 else MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.size(48.dp).background(if (isActive) Green500.copy(alpha = 0.1f) else Gray50, CircleShape)
+            modifier = Modifier.size(48.dp).background(if (isActive) Green500.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant, CircleShape)
         ) {
             Icon(imageVector = icon, contentDescription = label, tint = color, modifier = Modifier.size(22.dp))
         }

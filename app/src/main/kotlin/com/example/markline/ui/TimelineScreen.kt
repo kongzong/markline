@@ -81,9 +81,9 @@ fun TimelineScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("暂无记录", color = Gray400, fontSize = 16.sp)
+                    Text("暂无记录", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("点击首页签到按钮开始记录", color = Gray400, fontSize = 13.sp)
+                    Text("点击首页签到按钮开始记录", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 13.sp)
                 }
             }
             return@Scaffold
@@ -103,7 +103,7 @@ fun TimelineScreen(
                 item(key = "header_$dateLabel") {
                     Text(
                         text     = dateLabel,
-                        color    = Gray500,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
                     )
@@ -149,7 +149,7 @@ private fun TimelineItem(
                     modifier = Modifier
                         .width(2.dp)
                         .height(80.dp)
-                        .background(Gray100)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
                 )
             }
         }
@@ -163,7 +163,7 @@ private fun TimelineItem(
                 .padding(vertical = 4.dp),
             shape     = RoundedCornerShape(12.dp),
             colors    = CardDefaults.cardColors(
-                containerColor = Color.White
+                containerColor = MaterialTheme.colorScheme.surface
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
@@ -179,7 +179,7 @@ private fun TimelineItem(
                         text       = TimeUtil.formatTime(event.createdAt),
                         fontWeight = FontWeight.SemiBold,
                         fontSize   = 15.sp,
-                        color      = Gray900
+                        color      = MaterialTheme.colorScheme.onSurface
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -190,13 +190,13 @@ private fun TimelineItem(
                             Icon(
                                 Icons.Outlined.LocationOn,
                                 contentDescription = null,
-                                tint     = Gray400,
+                                tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text     = event.address,
-                                color    = Gray500,
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -211,13 +211,13 @@ private fun TimelineItem(
                             Icon(
                                 Icons.Outlined.Mic,
                                 contentDescription = null,
-                                tint     = Gray400,
+                                tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text     = "${event.audioDuration / 1000}秒",
-                                color    = Gray400,
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
                             // 波形占位条
@@ -231,7 +231,7 @@ private fun TimelineItem(
                     if (!event.note.isNullOrBlank()) {
                         Text(
                             text     = event.note,
-                            color    = Gray500,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -242,7 +242,7 @@ private fun TimelineItem(
                 Icon(
                     Icons.Outlined.NavigateNext,
                     contentDescription = null,
-                    tint     = Gray400,
+                    tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(20.dp)
                 )
             }

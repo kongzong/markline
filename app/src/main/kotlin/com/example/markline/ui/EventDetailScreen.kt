@@ -153,13 +153,13 @@ fun EventDetailScreen(
                 StatusBadge(status = ev.status)
             }
 
-            HorizontalDivider(color = Gray100)
+            HorizontalDivider()
 
             // ── 位置 ──
             DetailSection(icon = Icons.Outlined.LocationOn, title = "位置") {
                 if (ev.latitude != null && ev.longitude != null) {
                     Text(text = ev.address ?: "地址解析中…", style = MaterialTheme.typography.bodyLarge)
-                    Text(text = "${ev.latitude}, ${ev.longitude}", style = MaterialTheme.typography.bodySmall, color = Gray400)
+                    Text(text = "${ev.latitude}, ${ev.longitude}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(10.dp))
 
                     val (gcjLat, gcjLon) = Wgs84ToGcj02.transform(ev.latitude, ev.longitude)
@@ -190,7 +190,7 @@ fun EventDetailScreen(
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("定位失败 ", color = Gray400)
+                        Text("定位失败 ", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (isLocating) {
                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Green500)
                         } else {
@@ -218,7 +218,7 @@ fun EventDetailScreen(
                 }
             }
 
-            HorizontalDivider(color = Gray100)
+            HorizontalDivider()
 
             // ── 录音 ──
             DetailSection(icon = Icons.Outlined.Mic, title = "录音") {
@@ -235,10 +235,10 @@ fun EventDetailScreen(
                             Icon(if (isPlaying) Icons.Outlined.Stop else Icons.Outlined.PlayArrow, contentDescription = null, tint = Color.White)
                         }
                     }
-                    Text(dur, color = Gray400, fontSize = 12.sp)
+                    Text(dur, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("无录音 ", color = Gray400)
+                        Text("无录音 ", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (isRecording) {
                             Text("录音中 ${recordingCountdown}s...", color = Red400)
                         } else {
@@ -271,7 +271,7 @@ fun EventDetailScreen(
                 }
             }
 
-            HorizontalDivider(color = Gray100)
+            HorizontalDivider()
 
             // ── 备注 ──
             DetailSection(icon = Icons.Outlined.Description, title = "备注") {
@@ -364,10 +364,10 @@ private fun StatusBadge(status: Int) {
 @Composable
 private fun DetailSection(icon: ImageVector, title: String, content: @Composable ColumnScope.() -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
-        Icon(icon, contentDescription = null, tint = Gray400, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(title, color = Gray500, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
             content()
         }
     }

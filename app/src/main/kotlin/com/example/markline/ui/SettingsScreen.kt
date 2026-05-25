@@ -89,7 +89,7 @@ fun SettingsScreen(
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                color    = Gray100
+                color    = MaterialTheme.colorScheme.outlineVariant
             )
 
             // ── 定位设置 ──────────────────────────────────
@@ -108,7 +108,7 @@ fun SettingsScreen(
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                color    = Gray100
+                color    = MaterialTheme.colorScheme.outlineVariant
             )
 
             // ── 其他 ──────────────────────────────────────
@@ -194,7 +194,7 @@ private fun DurationSelectionDialog(
 private fun SectionHeader(title: String) {
     Text(
         text     = title,
-        color    = Gray500,
+        color    = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 13.sp,
         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
     )
@@ -214,11 +214,11 @@ private fun SwitchItem(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = Gray400, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 15.sp, color = Gray900, fontWeight = FontWeight.Medium)
-            Text(subtitle, fontSize = 12.sp, color = Gray400)
+            Text(title, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+            Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(
             checked         = checked,
@@ -227,7 +227,7 @@ private fun SwitchItem(
                 checkedThumbColor  = Color.White,
                 checkedTrackColor  = Green500,
                 uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = Gray100
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         )
     }
@@ -250,15 +250,15 @@ private fun ArrowItem(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = Gray400, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(12.dp))
-            Text(title, fontSize = 15.sp, color = Gray900, modifier = Modifier.weight(1f),
+            Text(title, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f),
                 fontWeight = FontWeight.Medium)
             if (trailing.isNotBlank()) {
-                Text(trailing, fontSize = 14.sp, color = Gray400)
+                Text(trailing, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.width(4.dp))
             }
-            Icon(Icons.Outlined.NavigateNext, contentDescription = null, tint = Gray400,
+            Icon(Icons.Outlined.NavigateNext, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.size(20.dp))
         }
     }
