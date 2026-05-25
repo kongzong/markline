@@ -52,7 +52,8 @@ fun TimelineScreen(
                     Text(
                         "历史记录",
                         fontWeight = FontWeight.Bold,
-                        fontSize   = 20.sp
+                        fontSize   = 20.sp,
+                        color      = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 actions = {

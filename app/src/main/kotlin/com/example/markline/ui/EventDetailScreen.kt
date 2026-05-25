@@ -119,11 +119,20 @@ fun EventDetailScreen(
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.Outlined.ArrowBack, 
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 title = {
-                    Text("记录详情", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(
+                        "记录详情", 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             )
         }
@@ -149,7 +158,12 @@ fun EventDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = TimeUtil.formatDateTime(ev.createdAt), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(
+                    text = TimeUtil.formatDateTime(ev.createdAt), 
+                    fontWeight = FontWeight.Bold, 
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 StatusBadge(status = ev.status)
             }
 

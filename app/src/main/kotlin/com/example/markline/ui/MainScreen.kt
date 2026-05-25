@@ -92,13 +92,26 @@ fun MainScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("MarkLine", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text("mark一下，汇聚成line", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "MarkLine", 
+                            fontWeight = FontWeight.Bold, 
+                            fontSize = 20.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "mark一下，汇聚成line", 
+                            fontSize = 11.sp, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "设置")
+                        Icon(
+                            Icons.Outlined.Settings, 
+                            contentDescription = "设置",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             )

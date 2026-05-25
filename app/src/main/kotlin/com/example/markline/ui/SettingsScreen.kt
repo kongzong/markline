@@ -38,14 +38,19 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text("设置", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(
+                        "设置", 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = "返回",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },

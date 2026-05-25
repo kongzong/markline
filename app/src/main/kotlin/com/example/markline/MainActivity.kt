@@ -166,9 +166,9 @@ private fun AppNavigation(
                             },
                             label = { Text(tab.label, fontSize = 11.sp) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor   = Green500,
-                                selectedTextColor   = Green500,
-                                indicatorColor      = Green500.copy(alpha = 0.12f),
+                                selectedIconColor   = MaterialTheme.colorScheme.primary,
+                                selectedTextColor   = MaterialTheme.colorScheme.primary,
+                                indicatorColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
