@@ -1,8 +1,12 @@
 package com.example.markline.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,36 +22,65 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.example.markline.MarkLineApp
 import com.example.markline.domain.Event
 import com.example.markline.domain.EventStore
 import com.example.markline.ui.theme.*
 import com.example.markline.util.AudioFileUtil
 import com.example.markline.util.TimeUtil
 import com.example.markline.util.Wgs84ToGcj02
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventDetailScreen(
     eventId:    Long,
     eventStore: EventStore,
-    onBack:     () -> Unit,
-    onEdit:     (Long) -> Unit = {}
+    onBack:     () -> Unit
 ) {
     val context = LocalContext.current
-    val event by produceState<Event?>(null, eventId) {
+    val scope = rememberCoroutineScope()
+    val app = context.applicationContext as MarkLineApp
+    
+    // 监听数据库变化，实时刷新 UI
+    var refreshTick by remember { mutableIntStateOf(0) }
+    val event by produceState<Event?>(null, eventId, refreshTick) {
         value = eventStore.findById(eventId)
     }
 
     var isPlaying by remember { mutableStateOf(false) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    
+    // 录音状态
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingCountdown by remember { mutableIntStateOf(0) }
+    
+    // 定位状态
+    var isLocating by remember { mutableStateOf(false) }
 
+    // 备注编辑状态
+    var isEditingNote by remember { mutableStateOf(false) }
+    var noteText by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
+
+    // 权限申请
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> }
+
+    // 播放逻辑
     fun togglePlay(path: String) {
         if (isPlaying) {
             mediaPlayer?.stop()
@@ -81,21 +114,16 @@ fun EventDetailScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(), // 增加 imePadding 确保脚手架内容避开键盘
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回",
-                            tint = MaterialTheme.colorScheme.onBackground)
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 },
                 title = {
                     Text("记录详情", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                },
-                actions = {
-                    IconButton(onClick = { onEdit(eventId) }) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "编辑")
-                    }
                 }
             )
         }
@@ -111,7 +139,10 @@ fun EventDetailScreen(
         val ev = event!!
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(scrollState) // 使用外部定义的 scrollState
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -131,7 +162,6 @@ fun EventDetailScreen(
                     Text(text = "${ev.latitude}, ${ev.longitude}", style = MaterialTheme.typography.bodySmall, color = Gray400)
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // WGS-84 → GCJ-02 纠偏，解决国内地图偏移
                     val (gcjLat, gcjLon) = Wgs84ToGcj02.transform(ev.latitude, ev.longitude)
                     val label = ev.address ?: "Mark"
 
@@ -142,16 +172,11 @@ fun EventDetailScreen(
                             .clickable {
                                 val amapUri = Uri.parse("androidamap://viewMap?sourceApplication=MarkLine&poiname=$label&lat=$gcjLat&lon=$gcjLon&dev=0")
                                 val amapIntent = Intent(Intent.ACTION_VIEW, amapUri).apply { setPackage("com.autonavi.minimap") }
-
                                 val geoUri = "geo:$gcjLat,$gcjLon?q=$gcjLat,$gcjLon($label)"
                                 val geoIntent = Intent(Intent.ACTION_VIEW, Uri.parse(geoUri))
-
                                 try {
-                                    if (amapIntent.resolveActivity(context.packageManager) != null) {
-                                        context.startActivity(amapIntent)
-                                    } else {
-                                        context.startActivity(geoIntent)
-                                    }
+                                    if (amapIntent.resolveActivity(context.packageManager) != null) context.startActivity(amapIntent)
+                                    else context.startActivity(geoIntent)
                                 } catch (_: Exception) {
                                     try { context.startActivity(geoIntent) } catch (_: Exception) {}
                                 }
@@ -159,14 +184,37 @@ fun EventDetailScreen(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.Map, contentDescription = null,
-                            tint = Green500, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Map, contentDescription = null, tint = Green500, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("在地图中查看", color = Green500,
-                            fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("在地图中查看", color = Green500, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 } else {
-                    Text("定位失败", color = Gray400)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("定位失败 ", color = Gray400)
+                        if (isLocating) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Green500)
+                        } else {
+                            Text(
+                                "点此重新获取", 
+                                color = Green500, 
+                                modifier = Modifier.clickable {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                                        permLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                        return@clickable
+                                    }
+                                    isLocating = true
+                                    scope.launch {
+                                        val loc = app.locationService.getCurrentLocation()
+                                        if (loc != null) {
+                                            eventStore.updateEnhancement(id = ev.id, latitude = loc.latitude, longitude = loc.longitude, address = loc.address, status = Event.STATUS_DONE)
+                                            refreshTick++
+                                        }
+                                        isLocating = false
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -184,16 +232,42 @@ fun EventDetailScreen(
                             onClick = { togglePlay(fullPath) },
                             modifier = Modifier.size(44.dp).background(Green500, CircleShape)
                         ) {
-                            Icon(
-                                if (isPlaying) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
-                                contentDescription = if (isPlaying) "停止" else "播放",
-                                tint = Color.White
-                            )
+                            Icon(if (isPlaying) Icons.Outlined.Stop else Icons.Outlined.PlayArrow, contentDescription = null, tint = Color.White)
                         }
                     }
                     Text(dur, color = Gray400, fontSize = 12.sp)
                 } else {
-                    Text("暂无录音", color = Gray400)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("无录音 ", color = Gray400)
+                        if (isRecording) {
+                            Text("录音中 ${recordingCountdown}s...", color = Red400)
+                        } else {
+                            Text("点此开始补录", color = Green500, modifier = Modifier.clickable {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                                    permLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+                                    return@clickable
+                                }
+                                val duration = app.settingsStore.audioDurationSec
+                                isRecording = true
+                                recordingCountdown = duration
+                                scope.launch {
+                                    val timerJob = launch {
+                                        for (i in duration downTo 1) {
+                                            recordingCountdown = i
+                                            delay(1000)
+                                        }
+                                    }
+                                    val result = app.audioRecorder.record(duration)
+                                    timerJob.cancel()
+                                    if (result != null) {
+                                        eventStore.updateEnhancement(id = ev.id, audioFileName = result.fileName, audioDuration = result.durationMs, status = Event.STATUS_DONE)
+                                        refreshTick++
+                                    }
+                                    isRecording = false
+                                }
+                            })
+                        }
+                    }
                 }
             }
 
@@ -201,7 +275,44 @@ fun EventDetailScreen(
 
             // ── 备注 ──
             DetailSection(icon = Icons.Outlined.Description, title = "备注") {
-                Text(ev.note ?: "暂无备注", style = MaterialTheme.typography.bodyLarge)
+                if (isEditingNote) {
+                    OutlinedTextField(
+                        value = noteText,
+                        onValueChange = { noteText = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                scope.launch {
+                                    eventStore.updateNote(ev.id, noteText)
+                                    isEditingNote = false
+                                    refreshTick++
+                                }
+                            }) {
+                                Icon(Icons.Outlined.Check, contentDescription = "完成", tint = Green500)
+                            }
+                        }
+                    )
+                    // 自动聚焦并滚动
+                    LaunchedEffect(Unit) {
+                        focusRequester.requestFocus()
+                        // 延迟一点确保键盘弹出后再滚动
+                        delay(200)
+                        scrollState.animateScrollTo(scrollState.maxValue)
+                    }
+                } else {
+                    Text(
+                        ev.note ?: "暂无备注，点此添加",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                noteText = ev.note ?: ""
+                                isEditingNote = true
+                            }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -223,7 +334,6 @@ fun EventDetailScreen(
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
                 title = { Text("确认删除") },
-                text = { Text("删除后无法恢复，确认删除吗？") },
                 confirmButton = {
                     TextButton(onClick = {
                         eventStore.deleteById(eventId)
@@ -246,9 +356,7 @@ private fun StatusBadge(status: Int) {
         3    -> "录音失败" to Amber400
         else -> "已创建" to Blue400
     }
-    Box(
-        modifier = Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
+    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
         Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }

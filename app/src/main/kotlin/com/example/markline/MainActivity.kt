@@ -216,8 +216,7 @@ private fun AppNavigation(
                 EventDetailScreen(
                     eventId    = eventId,
                     eventStore = eventStore,
-                    onBack     = { navController.popBackStack() },
-                    onEdit     = { id -> navController.navigate(Routes.edit(id)) }
+                    onBack     = { navController.popBackStack() }
                 )
             }
 

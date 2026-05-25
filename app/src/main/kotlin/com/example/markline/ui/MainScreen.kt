@@ -93,7 +93,7 @@ fun MainScreen(
                 title = {
                     Column {
                         Text("MarkLine", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text("Mark一下，自成Line", fontSize = 11.sp, color = Gray400)
+                        Text("mark一下，汇聚成line", fontSize = 11.sp, color = Gray400)
                     }
                 },
                 actions = {
