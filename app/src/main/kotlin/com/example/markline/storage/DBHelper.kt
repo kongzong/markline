@@ -14,7 +14,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "markline.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
         // 表名
         const val TABLE_EVENT = "event"
@@ -53,7 +53,10 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // v0.1 只有一个版本，预留升级逻辑
+        if (oldVersion < 2) {
+            // v1 → v2: audio_path 重命名为 audio_file_name
+            db.execSQL("ALTER TABLE $TABLE_EVENT RENAME COLUMN audio_path TO audio_file_name")
+        }
     }
 
     override fun onOpen(db: SQLiteDatabase) {
