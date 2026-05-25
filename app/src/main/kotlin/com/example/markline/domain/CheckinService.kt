@@ -120,7 +120,7 @@ class CheckinService(
                     hasAudio = true
                     eventStore.updateEnhancement(
                         id            = eventId,
-                        audioPath     = audioResult.filePath,
+                        audioFileName = audioResult.fileName,
                         audioDuration = audioResult.durationMs
                     )
                     _status.value = _status.value.copy(audioStatus = "已录音")

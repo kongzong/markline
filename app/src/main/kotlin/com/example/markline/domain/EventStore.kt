@@ -18,7 +18,7 @@ interface EventStore {
         latitude: Double? = null,
         longitude: Double? = null,
         address: String? = null,
-        audioPath: String? = null,
+        audioFileName: String? = null,
         audioDuration: Int? = null,
         status: Int? = null
     )

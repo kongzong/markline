@@ -25,7 +25,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         const val COL_LATITUDE = "latitude"
         const val COL_LONGITUDE = "longitude"
         const val COL_ADDRESS = "address"
-        const val COL_AUDIO_PATH = "audio_path"
+        const val COL_AUDIO_FILE_NAME = "audio_file_name"
         const val COL_AUDIO_DURATION = "audio_duration"
         const val COL_NOTE = "note"
         const val COL_STATUS = "status"
@@ -40,7 +40,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 $COL_LATITUDE      REAL,
                 $COL_LONGITUDE     REAL,
                 $COL_ADDRESS       TEXT,
-                $COL_AUDIO_PATH    TEXT,
+                $COL_AUDIO_FILE_NAME    TEXT,
                 $COL_AUDIO_DURATION INTEGER,
                 $COL_NOTE          TEXT,
                 $COL_STATUS        INTEGER DEFAULT 0

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.example.markline.domain.Event
 import com.example.markline.domain.EventStore
 import com.example.markline.ui.theme.*
+import com.example.markline.util.AudioFileUtil
 import com.example.markline.util.TimeUtil
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -174,13 +175,14 @@ fun EventDetailScreen(
 
             // ── 录音 ──
             DetailSection(icon = Icons.Outlined.Mic, title = "录音") {
-                if (!ev.audioPath.isNullOrBlank()) {
+                if (!ev.audioFileName.isNullOrBlank()) {
                     val dur = ev.audioDuration?.let { "${it / 1000}秒" } ?: "--"
+                    val fullPath = AudioFileUtil.getAudioFile(context, ev.audioFileName).absolutePath
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AudioWaveform(modifier = Modifier.weight(1f))
                         Spacer(modifier = Modifier.width(12.dp))
                         IconButton(
-                            onClick = { togglePlay(ev.audioPath) },
+                            onClick = { togglePlay(fullPath) },
                             modifier = Modifier.size(44.dp).background(Green500, CircleShape)
                         ) {
                             Icon(

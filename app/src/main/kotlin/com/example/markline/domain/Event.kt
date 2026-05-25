@@ -24,10 +24,10 @@ data class Event(
     /** 逆地理编码地址，解析失败时为 null */
     val address: String? = null,
 
-    /** 录音文件路径，录音失败或未启用时为 null */
-    val audioPath: String? = null,
+    /** 录音文件名（不含路径），录音失败或未启用时为 null */
+    val audioFileName: String? = null,
 
-    /** 录音时长（秒），audioPath 为 null 时为 null */
+    /** 录音时长（毫秒），audioFileName 为 null 时为 null */
     val audioDuration: Int? = null,
 
     /** 用户备注，可后续追加 */

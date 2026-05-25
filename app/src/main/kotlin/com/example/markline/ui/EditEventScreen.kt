@@ -25,6 +25,7 @@ import com.example.markline.domain.EventStore
 import com.example.markline.system.AudioRecorder
 import com.example.markline.system.LocationService
 import com.example.markline.ui.theme.*
+import com.example.markline.util.AudioFileUtil
 import com.example.markline.util.SettingsStore
 import com.example.markline.util.TimeUtil
 import kotlinx.coroutines.launch
@@ -295,8 +296,8 @@ fun EditEventScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 当前录音状态
-            val currentAudioPath = newAudio ?: ev.audioPath
-            if (!currentAudioPath.isNullOrBlank()) {
+            val currentAudioFileName = newAudio ?: ev.audioFileName
+            if (!currentAudioFileName.isNullOrBlank()) {
                 val dur = (newAudioDur ?: ev.audioDuration)?.let { "${it / 1000}秒" } ?: "--"
                 Row(
                     modifier = Modifier
@@ -348,7 +349,7 @@ fun EditEventScreen(
                             try {
                                 val result = audioRecorder.record(audioDuration)
                                 if (result != null) {
-                                    newAudio    = result.filePath
+                                    newAudio    = result.fileName
                                     newAudioDur = result.durationMs
                                     snackbarHost.showSnackbar("录音完成（${result.durationMs / 1000}秒）")
                                 } else {
@@ -377,7 +378,7 @@ fun EditEventScreen(
                     Icon(Icons.Outlined.Mic, contentDescription = null,
                         modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (!currentAudioPath.isNullOrBlank()) "重新录音" else "开始录音")
+                    Text(if (newAudio != null) "重新录音" else "开始录音")
                 }
             }
 
@@ -487,7 +488,7 @@ private suspend fun saveChanges(
     if (newAudio != null) {
         eventStore.updateEnhancement(
             id            = eventId,
-            audioPath     = newAudio,
+            audioFileName = newAudio,
             audioDuration = newAudioDur
         )
     }

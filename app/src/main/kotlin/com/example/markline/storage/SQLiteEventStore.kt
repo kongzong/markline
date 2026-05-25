@@ -4,12 +4,13 @@ import android.content.ContentValues
 import android.content.Context
 import com.example.markline.domain.Event
 import com.example.markline.domain.EventStore
+import com.example.markline.util.AudioFileUtil
 
 /**
  * EventStore 的 SQLite 实现
  * 使用 DBHelper 直接操作 SQLite，不使用 Room 或 ORM
  */
-class SQLiteEventStore(context: Context) : EventStore {
+class SQLiteEventStore(private val context: Context) : EventStore {
 
     private val dbHelper = DBHelper(context)
 
@@ -28,7 +29,7 @@ class SQLiteEventStore(context: Context) : EventStore {
         latitude: Double?,
         longitude: Double?,
         address: String?,
-        audioPath: String?,
+        audioFileName: String?,
         audioDuration: Int?,
         status: Int?
     ) {
@@ -37,7 +38,7 @@ class SQLiteEventStore(context: Context) : EventStore {
         latitude?.let { values.put(DBHelper.COL_LATITUDE, it) }
         longitude?.let { values.put(DBHelper.COL_LONGITUDE, it) }
         address?.let { values.put(DBHelper.COL_ADDRESS, it) }
-        audioPath?.let { values.put(DBHelper.COL_AUDIO_PATH, it) }
+        audioFileName?.let { values.put(DBHelper.COL_AUDIO_FILE_NAME, it) }
         audioDuration?.let { values.put(DBHelper.COL_AUDIO_DURATION, it) }
         status?.let { values.put(DBHelper.COL_STATUS, it) }
 
@@ -85,7 +86,12 @@ class SQLiteEventStore(context: Context) : EventStore {
 
     override fun deleteById(id: Long) {
         val db = dbHelper.writableDatabase
-        db.delete(DBHelper.TABLE_EVENT, "${DBHelper.COL_ID} = ?", arrayOf(id.toString()))
+        // 删除前取出音频文件名，用于级联删除文件
+        val fileName: String? = queryById(id)?.audioFileName
+        val deleted = db.delete(DBHelper.TABLE_EVENT, "${DBHelper.COL_ID} = ?", arrayOf(id.toString()))
+        if (deleted > 0 && fileName != null) {
+            AudioFileUtil.deleteAudioFile(context, fileName)
+        }
     }
 
     override fun queryById(id: Long): Event? {
@@ -114,7 +120,7 @@ class SQLiteEventStore(context: Context) : EventStore {
             longitude = if (isNull(colInt(DBHelper.COL_LONGITUDE))) null
                         else getDouble(colInt(DBHelper.COL_LONGITUDE)),
             address = getString(colInt(DBHelper.COL_ADDRESS)),
-            audioPath = getString(colInt(DBHelper.COL_AUDIO_PATH)),
+            audioFileName = getString(colInt(DBHelper.COL_AUDIO_FILE_NAME)),
             audioDuration = if (isNull(colInt(DBHelper.COL_AUDIO_DURATION))) null
                             else getInt(colInt(DBHelper.COL_AUDIO_DURATION)),
             note = getString(colInt(DBHelper.COL_NOTE)),
