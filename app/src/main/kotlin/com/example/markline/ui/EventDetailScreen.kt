@@ -29,6 +29,7 @@ import com.example.markline.domain.EventStore
 import com.example.markline.ui.theme.*
 import com.example.markline.util.AudioFileUtil
 import com.example.markline.util.TimeUtil
+import com.example.markline.util.Wgs84ToGcj02
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,43 +129,41 @@ fun EventDetailScreen(
                 if (ev.latitude != null && ev.longitude != null) {
                     Text(text = ev.address ?: "地址解析中…", style = MaterialTheme.typography.bodyLarge)
                     Text(text = "${ev.latitude}, ${ev.longitude}", style = MaterialTheme.typography.bodySmall, color = Gray400)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Box(
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // WGS-84 → GCJ-02 纠偏，解决国内地图偏移
+                    val (gcjLat, gcjLon) = Wgs84ToGcj02.transform(ev.latitude, ev.longitude)
+                    val label = ev.address ?: "Mark"
+
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Gray50)
-                            .border(1.dp, Gray100, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Green500.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                             .clickable {
-                                // 针对中国地图偏移修复：添加 coordType=gcj02。对于 Google 地图此参数会被忽略。
-                                // 同时构造更通用的 Intent，尝试调起不同的地图 App
-                                val label = ev.address ?: "Mark"
-                                val uriString = "geo:${ev.latitude},${ev.longitude}?q=${ev.latitude},${ev.longitude}($label)&coordType=gcj02"
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
-                                
-                                // 优先尝试高德地图特定的 URI 协议 (如果安装了)
-                                val amapUri = Uri.parse("androidamap://viewMap?sourceApplication=MarkLine&poiname=$label&lat=${ev.latitude}&lon=${ev.longitude}&dev=0")
+                                val amapUri = Uri.parse("androidamap://viewMap?sourceApplication=MarkLine&poiname=$label&lat=$gcjLat&lon=$gcjLon&dev=0")
                                 val amapIntent = Intent(Intent.ACTION_VIEW, amapUri).apply { setPackage("com.autonavi.minimap") }
-                                
+
+                                val geoUri = "geo:$gcjLat,$gcjLon?q=$gcjLat,$gcjLon($label)"
+                                val geoIntent = Intent(Intent.ACTION_VIEW, Uri.parse(geoUri))
+
                                 try {
                                     if (amapIntent.resolveActivity(context.packageManager) != null) {
                                         context.startActivity(amapIntent)
                                     } else {
-                                        context.startActivity(intent)
+                                        context.startActivity(geoIntent)
                                     }
-                                } catch (e: Exception) {
-                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    try { context.startActivity(geoIntent) } catch (_: Exception) {}
                                 }
-                            },
-                        contentAlignment = Alignment.Center
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Outlined.Map, contentDescription = null, tint = Green500, modifier = Modifier.size(32.dp))
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("点击查看地图 (已尝试纠偏)", color = Green500, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Icon(Icons.Outlined.Map, contentDescription = null,
+                            tint = Green500, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("在地图中查看", color = Green500,
+                            fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 } else {
                     Text("定位失败", color = Gray400)

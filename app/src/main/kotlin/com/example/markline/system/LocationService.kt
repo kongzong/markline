@@ -129,14 +129,26 @@ class LocationService(private val context: Context) {
     }
 
     private fun Address.toDisplayString(): String {
-        // 优先使用完整街道地址，否则拼接城市+区
+        // 1. 优先使用 getAddressLine(0)，Google Geocoder 返回的中文地址通常最完整
+        val line0 = getAddressLine(0)
+        if (!line0.isNullOrBlank() && line0.length >= 3) return line0
+
+        // 2. 手拼：区/街道 + 道路名 + 门牌号（适合国内地址 xx路xx号）
         val parts = mutableListOf<String>()
-        subLocality?.let { parts.add(it) }
-        thoroughfare?.let { parts.add(it) }
+        subLocality?.let { parts.add(it) }          // 望京街道
+        thoroughfare?.let { road ->                  // 阜通东大街
+            val num = featureName?.trim()            // 6号 / 6
+            if (!num.isNullOrBlank()) {
+                parts.add("$road$num")
+            } else {
+                parts.add(road)
+            }
+        }
+        // 3. 如果手拼也是空的，退到城市+区
         if (parts.isEmpty()) {
             locality?.let { parts.add(it) }
             subAdminArea?.let { parts.add(it) }
         }
-        return if (parts.isNotEmpty()) parts.joinToString("") else getAddressLine(0) ?: ""
+        return parts.joinToString("")
     }
 }
