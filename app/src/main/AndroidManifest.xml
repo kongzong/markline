@@ -56,7 +56,7 @@
             android:name=".system.WidgetCheckinReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.markline.ACTION_WIDGET_CHECKIN" />
+                <action android:name="app.markline.ACTION_WIDGET_CHECKIN" />
             </intent-filter>
         </receiver>
 

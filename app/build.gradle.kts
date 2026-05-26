@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.markline"
+    namespace = "app.markline"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.markline"
+        applicationId = "app.markline"
         minSdk = 29
         targetSdk = 34
         versionCode = 1
