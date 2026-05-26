@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 分享备份时，临时文件写入 cache 目录 -->
+    <cache-path
+        name="backup"
+        path="." />
+</paths>

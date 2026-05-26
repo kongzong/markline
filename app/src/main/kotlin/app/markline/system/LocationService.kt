@@ -79,8 +79,8 @@ class LocationService(private val context: Context) {
     private suspend fun requestFreshLocation(): Pair<Double, Double>? =
         suspendCancellableCoroutine { cont ->
             val request = LocationRequest.Builder(
-                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                1_000L
+                Priority.PRIORITY_HIGH_ACCURACY,
+                2_000L
             ).setMaxUpdates(1).build()
 
             val callback = object : LocationCallback() {
@@ -129,26 +129,72 @@ class LocationService(private val context: Context) {
     }
 
     private fun Address.toDisplayString(): String {
-        // 1. 优先使用 getAddressLine(0)，Google Geocoder 返回的中文地址通常最完整
-        val line0 = getAddressLine(0)
-        if (!line0.isNullOrBlank() && line0.length >= 3) return line0
+        // 1. 获取所有 address line，找出最完整的一条
+        val lines = (0..<maxAddressLineIndex).mapNotNull { getAddressLine(it) }
+            .filter { !it.isNullOrBlank() }
 
-        // 2. 手拼：区/街道 + 道路名 + 门牌号（适合国内地址 xx路xx号）
+        // 首选：找包含门牌号特征（数字结尾或含 "号/栋/座/层/室"）的行
+        val bestLine = lines.firstOrNull { line ->
+            line.any { it.isDigit() } || line.any { it in "号栋座层室楼单元幢" }
+        } ?: lines.firstOrNull()
+
+        // 如果 bestLine 已经包含门牌号级别的信息，直接返回
+        if (!bestLine.isNullOrBlank()) {
+            val hasHouseNumber = bestLine.any { it.isDigit() } || 
+                                 bestLine.any { it in "号栋座层室楼单元幢" }
+            if (hasHouseNumber && bestLine.length >= 5) return bestLine
+            // 即使没有明确门牌号但也足够长，也先保留
+            if (bestLine.length >= 8) return bestLine
+        }
+
+        // 2. 手拼：区/街道 + 道路名 + 门牌号
         val parts = mutableListOf<String>()
         subLocality?.let { parts.add(it) }          // 望京街道
         thoroughfare?.let { road ->                  // 阜通东大街
-            val num = featureName?.trim()            // 6号 / 6
+            val num = extractHouseNumber()
             if (!num.isNullOrBlank()) {
                 parts.add("$road$num")
             } else {
                 parts.add(road)
             }
         }
-        // 3. 如果手拼也是空的，退到城市+区
+        // 3. 如果 hand-pick 也空，尝试 premise + featureName
+        if (parts.isEmpty()) {
+            val extra = buildString {
+                premises?.let { append(it) }         // 夏都盈座
+                featureName?.let { append(it) }      // 3号楼
+            }
+            if (extra.isNotBlank()) parts.add(extra)
+        }
+        // 4. 最后退到城市+区
         if (parts.isEmpty()) {
             locality?.let { parts.add(it) }
             subAdminArea?.let { parts.add(it) }
         }
-        return parts.joinToString("")
+
+        val result = parts.joinToString("")
+
+        // 5. 如果手拼结果还是偏短且有 bestLine，把 bestLine 用作前缀
+        return if (result.length < 5 && !bestLine.isNullOrBlank()) {
+            if (bestLine.contains(result)) bestLine
+            else "$bestLine$result"
+        } else result.ifEmpty { bestLine ?: "" }
+    }
+
+    /**
+     * 从 Address 字段中提取门牌号。
+     * 优先从 featureName 获取，其次尝试从 getAddressLine(0) 尾部数字提取。
+     */
+    private fun Address.extractHouseNumber(): String? {
+        // featureName 在中文地址中通常就是门牌号（如 "6号"、"3号楼"）
+        featureName?.trim()?.let { if (it.isNotBlank()) return it }
+
+        // 尝试从 address line 提取尾部数字
+        val line0 = getAddressLine(0)
+        if (!line0.isNullOrBlank()) {
+            val match = Regex("""(\d+[号栋座层室楼]?)""").find(line0)
+            if (match != null) return match.value
+        }
+        return null
     }
 }

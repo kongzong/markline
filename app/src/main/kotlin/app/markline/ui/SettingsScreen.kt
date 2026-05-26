@@ -1,5 +1,9 @@
 package app.markline.ui
 
+import android.widget.Toast
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,14 +18,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.markline.domain.Event
 import app.markline.domain.EventStore
 import app.markline.ui.theme.*
+import app.markline.util.BackupManager
 import app.markline.util.SettingsStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import kotlin.random.Random
 
@@ -33,12 +41,45 @@ fun SettingsScreen(
     onBack: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var enableAudio   by remember { mutableStateOf(settingsStore.audioEnabled) }
     var audioDuration by remember { mutableStateOf(settingsStore.audioDurationSec) }
     var enableLocation by remember { mutableStateOf(settingsStore.locationEnabled) }
     var enableVibrate  by remember { mutableStateOf(settingsStore.vibrateEnabled) }
 
+    var isBackupProcessing by remember { mutableStateOf(false) }
+
     var showDurationDialog by remember { mutableStateOf(false) }
+
+    // 文件选择器（导入用）
+    val pickFile = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            isBackupProcessing = true
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val result = BackupManager.importFromUri(context, uri, eventStore)
+                    val msg = if (result.error != null) {
+                        result.error
+                    } else {
+                        "导入完成：成功 ${result.success} 条，跳过 ${result.skipped} 条"
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (result.failed > 0) {
+                            Toast.makeText(context, "$msg，失败 ${result.failed} 条", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, msg!!, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        isBackupProcessing = false
+                    }
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -155,6 +196,101 @@ fun SettingsScreen(
                 }
             )
 
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                color    = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            // ── 数据管理 ──────────────────────────────────
+            SectionHeader("数据管理")
+
+            // 处理中提示
+            if (isBackupProcessing) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "正在处理中，请稍候...",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Green500
+                    )
+                }
+            }
+
+            ArrowItem(
+                icon    = Icons.Outlined.SaveAlt,
+                title   = "导出到文件",
+                trailing = "保存到 Downloads",
+                onClick = {
+                    if (!isBackupProcessing) {
+                        isBackupProcessing = true
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val fileName = BackupManager.exportToFile(context, eventStore)
+                                withContext(Dispatchers.Main) {
+                                    if (fileName != null) {
+                                        Toast.makeText(context, "已保存到 Downloads/$fileName", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "没有可导出的数据", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } finally {
+                                withContext(Dispatchers.Main) { isBackupProcessing = false }
+                            }
+                        }
+                    }
+                }
+            )
+
+            ArrowItem(
+                icon    = Icons.Outlined.IosShare,
+                title   = "分享备份",
+                trailing = "发送到微信/邮件等",
+                onClick = {
+                    if (!isBackupProcessing) {
+                        isBackupProcessing = true
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val intent = BackupManager.createShareIntent(context, eventStore)
+                                withContext(Dispatchers.Main) {
+                                    if (intent != null) {
+                                        context.startActivity(Intent.createChooser(intent, "分享备份"))
+                                    } else {
+                                        Toast.makeText(context, "没有可导出的数据", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } finally {
+                                withContext(Dispatchers.Main) { isBackupProcessing = false }
+                            }
+                        }
+                    }
+                }
+            )
+
+            ArrowItem(
+                icon    = Icons.Outlined.FileOpen,
+                title   = "导入数据",
+                trailing = "从备份文件恢复",
+                onClick = {
+                    if (!isBackupProcessing) {
+                        pickFile.launch(arrayOf("application/json"))
+                    }
+                }
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                color    = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            // ── 帮助 ──────────────────────────────────────
+            SectionHeader("帮助")
+
             ArrowItem(
                 icon    = Icons.Outlined.HelpOutline,
                 title   = "使用帮助",
@@ -198,6 +334,7 @@ private fun generateMockData(eventStore: EventStore) {
             
             val timestamp = calendar.timeInMillis
             val event = Event(
+                uuid = java.util.UUID.randomUUID().toString(),
                 createdAt = timestamp,
                 latitude = 39.9 + (Random.nextDouble() * 0.1),
                 longitude = 116.3 + (Random.nextDouble() * 0.1),

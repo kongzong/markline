@@ -59,7 +59,11 @@ class CheckinService(
 
         val now = System.currentTimeMillis()
         val eventId = eventStore.insert(
-            Event(createdAt = now, status = Event.STATUS_CREATED)
+            Event(
+                uuid = java.util.UUID.randomUUID().toString(),
+                createdAt = now,
+                status = Event.STATUS_CREATED
+            )
         )
 
         val enableLocation = settingsStore.locationEnabled

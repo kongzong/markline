@@ -47,6 +47,9 @@ interface EventStore {
     /** 按 id 查询单条 */
     fun queryById(id: Long): Event?
 
+    /** 按 uuid 查询单条（跨设备导入用） */
+    fun findByUuid(uuid: String): Event?
+
     /** 别名，兼容 EventDetailScreen */
     fun findById(id: Long): Event? = queryById(id)
 

@@ -17,6 +17,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
     override fun insert(event: Event): Long {
         val db = dbHelper.writableDatabase
         val values = ContentValues().apply {
+            put(DBHelper.COL_UUID, event.uuid)
             put(DBHelper.COL_CREATED_AT, event.createdAt)
             put(DBHelper.COL_STATUS, event.status)
             // 插入时位置、音频均为 null，等待异步补全
@@ -143,6 +144,22 @@ class SQLiteEventStore(private val context: Context) : EventStore {
         return result
     }
 
+    override fun findByUuid(uuid: String): Event? {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            DBHelper.TABLE_EVENT,
+            null,
+            "${DBHelper.COL_UUID} = ?",
+            arrayOf(uuid),
+            null,
+            null,
+            null
+        )
+        return cursor.use {
+            if (it.moveToFirst()) it.toEvent() else null
+        }
+    }
+
     override fun deleteById(id: Long) {
         val db = dbHelper.writableDatabase
         // 删除前取出音频文件名，用于级联删除文件
@@ -173,6 +190,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
         fun colInt(col: String) = getColumnIndexOrThrow(col)
         return Event(
             id = getLong(colInt(DBHelper.COL_ID)),
+            uuid = getString(colInt(DBHelper.COL_UUID)) ?: "",
             createdAt = getLong(colInt(DBHelper.COL_CREATED_AT)),
             latitude = if (isNull(colInt(DBHelper.COL_LATITUDE))) null
                        else getDouble(colInt(DBHelper.COL_LATITUDE)),

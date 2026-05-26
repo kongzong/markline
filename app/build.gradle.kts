@@ -71,4 +71,7 @@ dependencies {
 
     // FusedLocation
     implementation(libs.play.services.location)
+
+    // Gson (JSON)
+    implementation(libs.gson)
 }

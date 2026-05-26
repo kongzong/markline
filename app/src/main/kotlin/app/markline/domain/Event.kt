@@ -12,6 +12,9 @@ package app.markline.domain
 data class Event(
     val id: Long = 0,
 
+    /** 全局唯一标识（UUID v4），用于跨设备合并和数据导出 */
+    val uuid: String = "",
+
     /** 签到时间，Unix 毫秒时间戳，签到后立即写入，永不修改 */
     val createdAt: Long,
 
