@@ -24,6 +24,7 @@ import com.example.markline.domain.Event
 import com.example.markline.domain.EventStore
 import com.example.markline.ui.theme.Green500
 import com.example.markline.util.TimeUtil
+import kotlinx.coroutines.delay
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +37,9 @@ fun TimelineScreen(
     // 状态定义：记录哪些日期被折叠
     val collapsedDates = remember { mutableStateMapOf<String, Boolean>() }
     
+    // 搜索状态
+    var searchQuery by remember { mutableStateOf("") }
+
     // 获取最近 7 天的记录（最新在上已经在 EventStore.queryRecent 中实现）
     val events by produceState<List<Event>>(emptyList()) {
         // 简单处理：查出 200 条，然后在 Compose 层过滤最近 7 天
@@ -43,6 +47,19 @@ fun TimelineScreen(
         val limit = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.timeInMillis
         value = all.filter { it.createdAt >= limit }
     }
+
+    // 搜索结果（带防抖）
+    val searchResults by produceState<List<Event>>(emptyList(), searchQuery) {
+        if (searchQuery.isBlank()) {
+            value = emptyList()
+        } else {
+            delay(300) // 300ms 防抖
+            value = eventStore.search(searchQuery.trim())
+        }
+    }
+
+    val isSearching = searchQuery.isNotBlank()
+    val displayEvents = if (isSearching) searchResults else events
 
     Scaffold(
         topBar = {
@@ -65,27 +82,58 @@ fun TimelineScreen(
         }
     ) { padding ->
 
-        if (events.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("最近 7 天暂无记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            return@Scaffold
-        }
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // ── 搜索栏 ──
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("搜索备注、地点、主题、日期…") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Search, contentDescription = "搜索",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Outlined.Clear, contentDescription = "清除",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Green500,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                )
+            )
 
-        // 按日期分组
-        val grouped = events.groupBy { TimeUtil.formatDate(it.createdAt) }
-        val today = TimeUtil.formatDate(System.currentTimeMillis())
+            if (displayEvents.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (isSearching) "未找到匹配「${searchQuery}」的记录" else "最近 7 天暂无记录",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                return@Scaffold
+            }
+
+            // 按日期分组
+            val grouped = displayEvents.groupBy { TimeUtil.formatDate(it.createdAt) }
+            val today = TimeUtil.formatDate(System.currentTimeMillis())
 
         LazyColumn(
-            modifier            = Modifier.fillMaxSize().padding(padding),
+            modifier            = Modifier.fillMaxSize(),
             contentPadding      = PaddingValues(bottom = 24.dp)
         ) {
             grouped.forEach { (dateLabel, dayEvents) ->
                 val isToday = dateLabel == today
-                // 默认折叠：非当天的旧记录自动折叠
-                val isCollapsed = collapsedDates.getOrDefault(dateLabel, !isToday)
+                // 搜索模式下全部展开，平时非当天折叠
+                val isCollapsed = if (isSearching) false
+                                  else collapsedDates.getOrDefault(dateLabel, !isToday)
 
                 // 日期分组 Header
                 item(key = "header_$dateLabel") {
@@ -97,7 +145,7 @@ fun TimelineScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text     = dateLabel,
+                            text     = "$dateLabel (${dayEvents.size})",
                             color    = if (isToday) Green500 else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 14.sp,
                             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
@@ -124,6 +172,7 @@ fun TimelineScreen(
                 }
             }
         }
+        }  // end Column
     }
 }
 

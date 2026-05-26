@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- 前台服务权限（Android 14+ 需要指定类型） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
     <!-- 运行时权限（懒请求） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -79,6 +83,12 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info_4x1" />
         </receiver>
+
+        <!-- 录音前台服务 -->
+        <service
+            android:name=".system.AudioRecordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
     </application>
 

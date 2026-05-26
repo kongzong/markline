@@ -14,7 +14,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "markline.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
 
         // 表名
         const val TABLE_EVENT = "event"
@@ -28,6 +28,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         const val COL_AUDIO_FILE_NAME = "audio_file_name"
         const val COL_AUDIO_DURATION = "audio_duration"
         const val COL_NOTE = "note"
+        const val COL_LABEL = "label"
         const val COL_STATUS = "status"
     }
 
@@ -43,6 +44,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 $COL_AUDIO_FILE_NAME    TEXT,
                 $COL_AUDIO_DURATION INTEGER,
                 $COL_NOTE          TEXT,
+                $COL_LABEL         TEXT,
                 $COL_STATUS        INTEGER DEFAULT 0
             )
             """.trimIndent()
@@ -56,6 +58,10 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         if (oldVersion < 2) {
             // v1 → v2: audio_path 重命名为 audio_file_name
             db.execSQL("ALTER TABLE $TABLE_EVENT RENAME COLUMN audio_path TO audio_file_name")
+        }
+        if (oldVersion < 3) {
+            // v2 → v3: 新增 label 列
+            db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_LABEL TEXT")
         }
     }
 

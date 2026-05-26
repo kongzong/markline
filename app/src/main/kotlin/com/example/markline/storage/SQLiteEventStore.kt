@@ -65,6 +65,65 @@ class SQLiteEventStore(private val context: Context) : EventStore {
         )
     }
 
+    override fun updateLabel(id: Long, label: String) {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply {
+            put(DBHelper.COL_LABEL, label)
+        }
+        db.update(
+            DBHelper.TABLE_EVENT,
+            values,
+            "${DBHelper.COL_ID} = ?",
+            arrayOf(id.toString())
+        )
+    }
+
+    override fun queryLabels(): List<String> {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            true,  // distinct
+            DBHelper.TABLE_EVENT,
+            arrayOf(DBHelper.COL_LABEL),
+            "${DBHelper.COL_LABEL} IS NOT NULL AND ${DBHelper.COL_LABEL} != ''",
+            null, null, null,
+            "${DBHelper.COL_LABEL} ASC",
+            null
+        )
+        val result = mutableListOf<String>()
+        cursor.use {
+            while (it.moveToNext()) {
+                it.getString(0)?.let { label -> result.add(label) }
+            }
+        }
+        return result
+    }
+
+    override fun search(query: String, limit: Int): List<Event> {
+        val db = dbHelper.readableDatabase
+        val like = "%$query%"
+        val where = """
+            ${DBHelper.COL_NOTE} LIKE ? OR 
+            ${DBHelper.COL_ADDRESS} LIKE ? OR 
+            ${DBHelper.COL_LABEL} LIKE ? OR
+            strftime('%Y-%m-%d', ${DBHelper.COL_CREATED_AT} / 1000, 'unixepoch', 'localtime') LIKE ? OR
+            strftime('%m', ${DBHelper.COL_CREATED_AT} / 1000, 'unixepoch', 'localtime') || '月' || strftime('%d', ${DBHelper.COL_CREATED_AT} / 1000, 'unixepoch', 'localtime') || '日' LIKE ?
+        """.trimIndent()
+        val args = arrayOf(like, like, like, like, like)
+        val cursor = db.query(
+            DBHelper.TABLE_EVENT,
+            null, where, args, null, null,
+            "${DBHelper.COL_CREATED_AT} DESC",
+            limit.toString()
+        )
+        val result = mutableListOf<Event>()
+        cursor.use {
+            while (it.moveToNext()) {
+                result.add(cursor.toEvent())
+            }
+        }
+        return result
+    }
+
     override fun queryAll(): List<Event> = queryRecent(Int.MAX_VALUE)
 
     override fun queryRecent(limit: Int): List<Event> {
@@ -124,6 +183,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
             audioDuration = if (isNull(colInt(DBHelper.COL_AUDIO_DURATION))) null
                             else getInt(colInt(DBHelper.COL_AUDIO_DURATION)),
             note = getString(colInt(DBHelper.COL_NOTE)),
+            label = getString(colInt(DBHelper.COL_LABEL)),
             status = getInt(colInt(DBHelper.COL_STATUS))
         )
     }

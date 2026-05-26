@@ -1,6 +1,7 @@
 package com.example.markline.ui
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -22,20 +23,22 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.markline.domain.Event
 import com.example.markline.domain.EventStore
-import com.example.markline.system.AudioRecorder
+import com.example.markline.system.AudioRecordService
 import com.example.markline.system.LocationService
 import com.example.markline.ui.theme.*
-import com.example.markline.util.AudioFileUtil
 import com.example.markline.util.SettingsStore
 import com.example.markline.util.TimeUtil
+import androidx.compose.foundation.BorderStroke
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * 记录编辑页
  *
  * 支持手工补足：
  *   - 位置：补定位 + 手动输入地址（原始定位存在时不可覆盖）
- *   - 录音：补录音（原始录音存在时不可覆盖）
+ *   - 录音：补录音（原始录音存在时不可覆盖，通过前台服务保障后台/锁屏继续录音）
  *   - 备注：自由文本
  *
  * Append-only 原则：created_at / 原始坐标 / 原始录音 均为不可变数据
@@ -43,13 +46,12 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditEventScreen(
-    eventId:         Long,
-    eventStore:      EventStore,
+    eventId:       Long,
+    eventStore:    EventStore,
     locationService: LocationService,
-    audioRecorder:   AudioRecorder,
-    settingsStore:   SettingsStore,
-    onBack:          () -> Unit,
-    onSaved:         () -> Unit
+    settingsStore: SettingsStore,
+    onBack:        () -> Unit,
+    onSaved:       () -> Unit
 ) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
@@ -68,6 +70,11 @@ fun EditEventScreen(
     var newAudio   by remember { mutableStateOf<String?>(null) }
     var newAudioDur by remember { mutableStateOf<Int?>(null) }
 
+    // UI 状态
+    var isLocating  by remember { mutableStateOf(false) }
+    var isRecording by remember { mutableStateOf(false) }
+    var isSaving    by remember { mutableStateOf(false) }
+
     // 加载完成后初始化编辑字段
     LaunchedEffect(event) {
         event?.let { ev ->
@@ -76,10 +83,42 @@ fun EditEventScreen(
         }
     }
 
-    // UI 状态
-    var isLocating  by remember { mutableStateOf(false) }
-    var isRecording by remember { mutableStateOf(false) }
-    var isSaving    by remember { mutableStateOf(false) }
+    // "补录音"：通过前台服务录制，完成后轮询结果文件
+    fun startAudioRecord(durationSec: Int) {
+        if (isRecording) return
+        isRecording = true
+        AudioRecordService.outputFilePath = null
+
+        val intent = Intent(context, AudioRecordService::class.java).apply {
+            putExtra(AudioRecordService.EXTRA_DURATION_SEC, durationSec)
+        }
+        ContextCompat.startForegroundService(context, intent)
+
+        scope.launch {
+            // 等待录音文件写入（最多等 duration + 5 秒）
+            val deadline = System.currentTimeMillis() + (durationSec + 5) * 1000L
+            var outFile: File? = null
+            while (System.currentTimeMillis() < deadline) {
+                val path = AudioRecordService.outputFilePath
+                if (path != null) {
+                    outFile = File(path)
+                    if (outFile.exists()) break
+                }
+                delay(300)
+            }
+
+            isRecording = false
+
+            val outFileFinal = outFile
+            if (outFileFinal != null && outFileFinal.exists() && outFileFinal.length() > 100) {
+                newAudio    = outFileFinal.name
+                newAudioDur = ((System.currentTimeMillis() - (System.currentTimeMillis() - durationSec * 1000))).toInt()
+                snackbarHost.showSnackbar("录音完成（${durationSec}秒）")
+            } else {
+                snackbarHost.showSnackbar("录音失败，请检查麦克风权限")
+            }
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
@@ -99,7 +138,6 @@ fun EditEventScreen(
                     )
                 },
                 actions = {
-                    // 保存按钮
                     TextButton(
                         onClick = {
                             if (!isSaving) {
@@ -179,8 +217,7 @@ fun EditEventScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ━━━━━━━━ 位置 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+            // ━━━━━━━ 位置 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             SectionHeader(icon = Icons.Outlined.LocationOn, title = "位置")
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -302,8 +339,7 @@ fun EditEventScreen(
             HorizontalDivider(color = Gray100)
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ━━━━━━━━ 录音 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+            // ━━━━━━━ 录音 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             SectionHeader(icon = Icons.Outlined.Mic, title = "录音")
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -347,7 +383,7 @@ fun EditEventScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // 补录音按钮（仅在原始录音不存在时显示）
+            // 补录音按钮（仅在原始录音不存在时显示，通过前台服务录音）
             if (ev.audioFileName == null) {
                 val audioDuration = settingsStore.audioDurationSec
                 OutlinedButton(
@@ -361,26 +397,11 @@ fun EditEventScreen(
                             return@OutlinedButton
                         }
 
-                        if (!isRecording) {
-                            isRecording = true
-                            scope.launch {
-                                try {
-                                    val result = audioRecorder.record(audioDuration)
-                                    if (result != null) {
-                                        newAudio    = result.fileName
-                                        newAudioDur = result.durationMs
-                                        snackbarHost.showSnackbar("录音完成（${result.durationMs / 1000}秒）")
-                                    } else {
-                                        snackbarHost.showSnackbar("录音失败，请检查麦克风权限")
-                                    }
-                                } finally {
-                                    isRecording = false
-                                }
-                            }
-                        }
+                        startAudioRecord(audioDuration)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(10.dp),
+                    enabled   = !isRecording,
                     colors   = ButtonDefaults.outlinedButtonColors(contentColor = Green500),
                     border   = androidx.compose.foundation.BorderStroke(1.dp, Green500)
                 ) {
@@ -405,8 +426,7 @@ fun EditEventScreen(
             HorizontalDivider(color = Gray100)
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ━━━━━━━━ 备注 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+            // ━━━━━━━ 备注 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             SectionHeader(icon = Icons.Outlined.Description, title = "备注")
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -421,9 +441,9 @@ fun EditEventScreen(
                     .heightIn(min = 100.dp),
                 maxLines      = 8,
                 colors        = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Green500,
-                    focusedLabelColor  = Green500,
-                    cursorColor        = Green500
+                    focusedBorderColor   = Green500,
+                    focusedLabelColor    = Green500,
+                    cursorColor          = Green500
                 )
             )
 
@@ -461,7 +481,7 @@ fun EditEventScreen(
                 ),
                 enabled = !isSaving
             ) {
-                Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("保存记录", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
@@ -535,5 +555,3 @@ private fun SectionHeader(
         Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Gray900)
     }
 }
-
-// TimeUtil.formatDateTime() 已在 TimeUtil.kt 中统一定义

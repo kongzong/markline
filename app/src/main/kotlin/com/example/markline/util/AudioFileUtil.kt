@@ -15,9 +15,9 @@ object AudioFileUtil {
 
     private const val SUB_DIR = "audio"
 
-    /** 根据文件名获取 File 对象 */
+    /** 根据文件名获取 File 对象（与 AudioRecordService 写入位置一致：内部 filesDir） */
     fun getAudioFile(context: Context, fileName: String): File =
-        File(context.getExternalFilesDir(null), "$SUB_DIR/$fileName")
+        File(context.filesDir, "$SUB_DIR/$fileName")
 
     /** 删除音频文件，成功返回 true */
     fun deleteAudioFile(context: Context, fileName: String): Boolean {

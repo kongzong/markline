@@ -33,6 +33,9 @@ data class Event(
     /** 用户备注，可后续追加 */
     val note: String? = null,
 
+    /** 主题标签，用于将一系列 Mark 统一命名分组 */
+    val label: String? = null,
+
     /** 事件状态 */
     val status: Int = STATUS_CREATED
 ) {

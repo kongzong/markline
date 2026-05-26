@@ -26,6 +26,18 @@ interface EventStore {
     /** 追加 note */
     fun updateNote(id: Long, note: String)
 
+    /** 设置主题标签 */
+    fun updateLabel(id: Long, label: String)
+
+    /** 查询所有已使用的主题标签（去重） */
+    fun queryLabels(): List<String>
+
+    /**
+     * 关键字搜索：在 note、address、label、日期 中模糊匹配
+     * 返回匹配结果，按 created_at 倒序，最多 200 条
+     */
+    fun search(query: String, limit: Int = 200): List<Event>
+
     /** 查询全部 Event，按 created_at 倒序 */
     fun queryAll(): List<Event>
 

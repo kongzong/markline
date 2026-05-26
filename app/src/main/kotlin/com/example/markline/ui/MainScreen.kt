@@ -91,19 +91,12 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            "MarkLine", 
-                            fontWeight = FontWeight.Bold, 
-                            fontSize = 20.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "mark一下，汇聚成line", 
-                            fontSize = 11.sp, 
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
+                    Text(
+                        "点点Mark，汇聚成Line",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
@@ -190,7 +183,7 @@ fun MainScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Button(
-                            onClick = { checkinService.completeAudioEarly() },
+                            onClick = { checkinService.completeAudioEarly(context) },
                             modifier = Modifier.size(48.dp),
                             contentPadding = PaddingValues(0.dp),
                             shape = CircleShape,

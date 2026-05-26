@@ -237,7 +237,6 @@ private fun AppNavigation(
                     eventId       = eventId,
                     eventStore    = eventStore,
                     locationService = (navController.context.applicationContext as MarkLineApp).locationService,
-                    audioRecorder   = (navController.context.applicationContext as MarkLineApp).audioRecorder,
                     settingsStore   = settingsStore,
                     onBack        = { navController.popBackStack() },
                     onSaved       = { navController.popBackStack() }

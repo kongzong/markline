@@ -34,6 +34,7 @@ import androidx.core.content.ContextCompat
 import com.example.markline.MarkLineApp
 import com.example.markline.domain.Event
 import com.example.markline.domain.EventStore
+import com.example.markline.system.AudioRecordService
 import com.example.markline.ui.theme.*
 import com.example.markline.util.AudioFileUtil
 import com.example.markline.util.TimeUtil
@@ -74,6 +75,11 @@ fun EventDetailScreen(
     var noteText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
+
+    // 主题标签编辑状态
+    var isEditingLabel by remember { mutableStateOf(false) }
+    var labelText by remember { mutableStateOf("") }
+    val existingLabels = remember { mutableStateListOf<String>() }
 
     // 权限申请
     val permLauncher = rememberLauncherForActivityResult(
@@ -153,18 +159,128 @@ fun EventDetailScreen(
                 .padding(padding)
                 .verticalScroll(scrollState) // 使用外部定义的 scrollState
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = TimeUtil.formatDateTime(ev.createdAt), 
-                    fontWeight = FontWeight.Bold, 
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                StatusBadge(status = ev.status)
+            Text(
+                text = TimeUtil.formatDateTime(ev.createdAt),
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(16.dp)
+            )
+
+            HorizontalDivider()
+
+            // ── 主题标签 ──
+            DetailSection(icon = Icons.Outlined.Label, title = "主题") {
+                if (isEditingLabel) {
+                    // 编辑模式：已有标签快捷选择 + 手动输入
+                    Column {
+                        // 已有标签作为可点击 Chip
+                        if (existingLabels.isNotEmpty()) {
+                            Text("选择已有主题：", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column {
+                                existingLabels.chunked(3).forEach { rowLabels ->
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.padding(vertical = 3.dp)
+                                    ) {
+                                        rowLabels.forEach { lbl ->
+                                            SuggestionChip(
+                                                onClick = {
+                                                    scope.launch {
+                                                        eventStore.updateLabel(ev.id, lbl)
+                                                        refreshTick++
+                                                        isEditingLabel = false
+                                                    }
+                                                },
+                                                label = { Text(lbl, fontSize = 13.sp) },
+                                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                                    containerColor = Green500.copy(alpha = 0.1f)
+                                                ),
+                                                border = SuggestionChipDefaults.suggestionChipBorder(
+                                                    borderColor = Green500.copy(alpha = 0.3f),
+                                                    enabled = true
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("或输入新主题：", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                        OutlinedTextField(
+                            value = labelText,
+                            onValueChange = { labelText = it },
+                            placeholder = { Text("输入主题名称") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    if (labelText.isNotBlank()) {
+                                        scope.launch {
+                                            eventStore.updateLabel(ev.id, labelText.trim())
+                                            refreshTick++
+                                            isEditingLabel = false
+                                        }
+                                    }
+                                }) {
+                                    Icon(Icons.Outlined.Check, contentDescription = "确认", tint = Green500)
+                                }
+                            }
+                        )
+                    }
+                    LaunchedEffect(Unit) {
+                        // 加载已有标签
+                        existingLabels.clear()
+                        existingLabels.addAll(eventStore.queryLabels())
+                    }
+                } else {
+                    // 展示模式：显示当前标签或"添加到主题"
+                    if (!ev.label.isNullOrBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Green500.copy(alpha = 0.12f))
+                                    .clickable {
+                                        labelText = ev.label ?: ""
+                                        isEditingLabel = true
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    ev.label,
+                                    color = Green500,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "点击修改",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                modifier = Modifier.clickable {
+                                    labelText = ev.label ?: ""
+                                    isEditingLabel = true
+                                }
+                            )
+                        }
+                    } else {
+                        Text(
+                            "添加到主题",
+                            color = Green500,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.clickable {
+                                labelText = ""
+                                isEditingLabel = true
+                            }
+                        )
+                    }
+                }
             }
 
             HorizontalDivider()
@@ -271,10 +387,25 @@ fun EventDetailScreen(
                                             delay(1000)
                                         }
                                     }
-                                    val result = app.audioRecorder.record(duration)
+                                    AudioRecordService.outputFilePath = null
+                                    val intent = Intent(context, AudioRecordService::class.java).apply {
+                                        putExtra(AudioRecordService.EXTRA_DURATION_SEC, duration)
+                                    }
+                                    ContextCompat.startForegroundService(context, intent)
+
+                                    val deadline = System.currentTimeMillis() + (duration + 5) * 1000L
+                                    var outFile: java.io.File? = null
+                                    while (System.currentTimeMillis() < deadline) {
+                                        val path = AudioRecordService.outputFilePath
+                                        if (path != null) {
+                                            outFile = java.io.File(path)
+                                            if (outFile!!.exists()) break
+                                        }
+                                        delay(300)
+                                    }
                                     timerJob.cancel()
-                                    if (result != null) {
-                                        eventStore.updateEnhancement(id = ev.id, audioFileName = result.fileName, audioDuration = result.durationMs, status = Event.STATUS_DONE)
+                                    if (outFile != null && outFile!!.exists() && outFile!!.length() > 100) {
+                                        eventStore.updateEnhancement(id = ev.id, audioFileName = outFile!!.name, audioDuration = duration * 1000, status = Event.STATUS_DONE)
                                         refreshTick++
                                     }
                                     isRecording = false
@@ -359,19 +490,6 @@ fun EventDetailScreen(
                 }
             )
         }
-    }
-}
-
-@Composable
-private fun StatusBadge(status: Int) {
-    val (label, color) = when (status) {
-        1    -> "已完成" to Green500
-        2    -> "定位失败" to Amber400
-        3    -> "录音失败" to Amber400
-        else -> "已创建" to Blue400
-    }
-    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-        Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
