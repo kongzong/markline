@@ -4,6 +4,9 @@ import android.widget.Toast
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -37,7 +40,7 @@ import kotlin.random.Random
 @Composable
 fun SettingsScreen(
     settingsStore: SettingsStore,
-    eventStore: EventStore, // 增加参数以支持生成数据
+    eventStore: EventStore,
     onBack: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
@@ -50,6 +53,12 @@ fun SettingsScreen(
     var isBackupProcessing by remember { mutableStateOf(false) }
 
     var showDurationDialog by remember { mutableStateOf(false) }
+    var showHelpDialog     by remember { mutableStateOf(false) }
+    var showAboutDialog    by remember { mutableStateOf(false) }
+
+    // 调试工具：连续点击"关于我们"7次后显示（仿 Android 开发者选项）
+    var debugClickCount by remember { mutableIntStateOf(0) }
+    var showDebugTools  by remember { mutableStateOf(false) }
 
     // 文件选择器（导入用）
     val pickFile = rememberLauncherForActivityResult(
@@ -86,8 +95,8 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "设置", 
-                        fontWeight = FontWeight.Bold, 
+                        "设置",
+                        fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -155,25 +164,6 @@ fun SettingsScreen(
                 onChecked = {
                     enableLocation = it
                     settingsStore.locationEnabled = it
-                }
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                color    = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            // ── 调试工具 ──────────────────────────────────
-            SectionHeader("调试工具")
-
-            ArrowItem(
-                icon    = Icons.Outlined.Storage,
-                title   = "生成过去 10 天模拟数据",
-                trailing = "点击生成",
-                onClick = {
-                    scope.launch {
-                        generateMockData(eventStore)
-                    }
                 }
             )
 
@@ -278,7 +268,7 @@ fun SettingsScreen(
                 trailing = "从备份文件恢复",
                 onClick = {
                     if (!isBackupProcessing) {
-                        pickFile.launch(arrayOf("application/json"))
+                        pickFile.launch(arrayOf("application/zip", "application/json"))
                     }
                 }
             )
@@ -294,18 +284,48 @@ fun SettingsScreen(
             ArrowItem(
                 icon    = Icons.Outlined.HelpOutline,
                 title   = "使用帮助",
-                onClick = {}
+                onClick = { showHelpDialog = true }
             )
 
             ArrowItem(
                 icon    = Icons.Outlined.Info,
                 title   = "关于我们",
-                onClick = {}
+                onClick = { showAboutDialog = true }
             )
+
+            // ── 调试工具（隐藏区，连续点击"关于我们"7次后显示）──
+            AnimatedVisibility(
+                visible = showDebugTools,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Column {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        color    = MaterialTheme.colorScheme.outlineVariant
+                    )
+
+                    SectionHeader("调试工具")
+
+                    ArrowItem(
+                        icon    = Icons.Outlined.Storage,
+                        title   = "生成过去 10 天模拟数据",
+                        trailing = "点击生成",
+                        onClick = {
+                            scope.launch {
+                                generateMockData(eventStore)
+                                Toast.makeText(context, "模拟数据已生成", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
+
+    // ── 对话框 ──────────────────────────────────────────
 
     if (showDurationDialog) {
         DurationSelectionDialog(
@@ -318,20 +338,183 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showHelpDialog) {
+        HelpDialog(onDismiss = { showHelpDialog = false })
+    }
+
+    if (showAboutDialog) {
+        AboutDialog(
+            onDismiss = { showAboutDialog = false },
+            onVersionClick = {
+                if (!showDebugTools) {
+                    debugClickCount++
+                    if (debugClickCount >= 7) {
+                        showDebugTools = true
+                        Toast.makeText(context, "调试工具已启用", Toast.LENGTH_SHORT).show()
+                    } else if (debugClickCount >= 4) {
+                        Toast.makeText(context, "再点击 ${7 - debugClickCount} 次启用调试工具", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
 }
+
+// ── 使用帮助对话框 ──────────────────────────────────────
+
+@Composable
+private fun HelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("使用帮助", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                HelpSection("签到打卡",
+                    "点击首页底部中央的圆形按钮即可签到。",
+                    "签到时会自动记录当前位置和地址。",
+                    "如果开启了录音功能，签到后将自动开始录音。"
+                )
+                HelpSection("录音",
+                    "在「录音设置」中可开启/关闭自动录音功能。",
+                    "录音时长可在 3秒 / 10秒 / 15秒 / 30秒 中选择。",
+                    "录音文件会保存在应用私有目录中，导出备份时一同打包。"
+                )
+                HelpSection("定位",
+                    "在「定位设置」中可开启/关闭自动定位。",
+                    "开启后签到将自动获取 GPS 位置并解析为地址。",
+                    "定位精度为高精度模式，确保门牌号等细节准确。"
+                )
+                HelpSection("时间线",
+                    "首页向上滑动进入时间线视图。",
+                    "时间线按日期分组展示所有签到记录。",
+                    "点击任意记录可查看详情，包括位置、录音、备注等。"
+                )
+                HelpSection("数据备份",
+                    "「导出到文件」：将数据打包为 ZIP 文件保存到 Downloads。",
+                    "「分享备份」：通过微信、邮件等方式分享备份文件。",
+                    "「导入数据」：选择备份文件恢复数据，支持 ZIP 和旧版 JSON 格式。",
+                    "导入时按 UUID 去重，已存在的记录会自动跳过。"
+                )
+                HelpSection("注意事项",
+                    "首次使用需授予位置和录音权限。",
+                    "建议定期导出备份，避免数据丢失。",
+                    "更换手机时，使用分享备份功能可快速迁移数据。"
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("知道了") }
+        }
+    )
+}
+
+@Composable
+private fun HelpSection(title: String, vararg items: String) {
+    Column {
+        Text(
+            title,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        items.forEach { item ->
+            Row(modifier = Modifier.padding(start = 4.dp)) {
+                Text("· ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    item,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 22.sp
+                )
+            }
+        }
+    }
+}
+
+// ── 关于我们对话框 ──────────────────────────────────────
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit, onVersionClick: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = Green500,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("关于 MarkLine", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "点点mark，汇聚成line",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "记录每一天的足迹，让生活有迹可循。",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                AboutRow("版本", "1.0.0", onClick = onVersionClick)
+                AboutRow("开发者", "Kong & WorkBuddy")
+                AboutRow("技术栈", "Kotlin + Jetpack Compose")
+                AboutRow("数据存储", "SQLite (Room 风格)")
+                AboutRow("坐标转换", "WGS-84 → GCJ-02")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+private fun AboutRow(label: String, value: String, onClick: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() }
+                else Modifier
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+// ── 其他组件 ────────────────────────────────────────────
 
 private fun generateMockData(eventStore: EventStore) {
     val addresses = listOf("办公大楼", "城市广场", "星巴克咖啡", "健身中心", "家里", "图书馆", "购物中心")
     val notes = listOf("开会中", "正在休息", "买杯咖啡", "锻炼身体", "阅读书籍", "看场电影", "逛街中")
 
     for (day in 0..10) {
-        val count = Random.nextInt(1, 4) // 每天生成 1-3 条
+        val count = Random.nextInt(1, 4)
         for (i in 1..count) {
             val calendar = Calendar.getInstance()
             calendar.add(Calendar.DAY_OF_YEAR, -day)
             calendar.set(Calendar.HOUR_OF_DAY, Random.nextInt(8, 22))
             calendar.set(Calendar.MINUTE, Random.nextInt(0, 59))
-            
+
             val timestamp = calendar.timeInMillis
             val event = Event(
                 uuid = java.util.UUID.randomUUID().toString(),

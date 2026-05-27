@@ -92,7 +92,7 @@ fun MainScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "点点Mark，汇聚成Line",
+                        "点点mark，汇聚成line",
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
                         color = MaterialTheme.colorScheme.onSurface

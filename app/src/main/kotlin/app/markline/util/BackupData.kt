@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter
 /** 备份文件的顶层结构 */
 data class BackupFile(
     @SerializedName("version")
-    val version: Int = 1,
+    val version: Int = 2,
 
     @SerializedName("appName")
     val appName: String = "MarkLine",
@@ -49,9 +49,6 @@ data class EventJson(
     @SerializedName("audioDuration")
     val audioDuration: Int?,
 
-    @SerializedName("audioData")
-    val audioData: String?,  // base64 encoded audio file content
-
     @SerializedName("note")
     val note: String?,
 
@@ -64,10 +61,10 @@ data class EventJson(
 
 /**
  * 生成导出文件名
- * 格式：MarkLine_backup_2026-05-26_160000.json
+ * 格式：MarkLine_backup_2026-05-26_160000.zip
  */
 fun generateBackupFileName(): String {
     val now = LocalDateTime.now()
     val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss")
-    return "MarkLine_backup_${now.format(fmt)}.json"
+    return "MarkLine_backup_${now.format(fmt)}.zip"
 }

@@ -12,42 +12,39 @@ import app.markline.domain.Event
 import app.markline.domain.EventStore
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /**
  * 数据导入导出管理器
  *
  * 支持两个导出通道：
- * - 通道 A：导出到文件（MediaStore → Downloads，永久保留）
- * - 通道 B：分享备份（FileProvider → ShareSheet，跨设备迁移）
+ * - 通道 A：导出到文件（MediaStore -> Downloads，永久保留）
+ * - 通道 B：分享备份（FileProvider -> ShareSheet，跨设备迁移）
  */
 object BackupManager {
 
     private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
 
-    // ──────────────── 公共导出逻辑 ────────────────
+    // ---- 公共导出逻辑 ----
 
     /**
-     * 生成备份 JSON 字符串。
+     * 生成备份 JSON 字符串（v2：不含 audio base64，音频以分离文件形式存入 ZIP）。
      * 返回 null 表示数据库为空。
      */
-    suspend fun generateBackupJson(context: Context, eventStore: EventStore): String? =
-        withContext(Dispatchers.IO) {
+    suspend fun generateBackupJson(context: Context, eventStore: EventStore): String? {
+        return withContext(Dispatchers.IO) {
             val events = eventStore.queryAll()
             if (events.isEmpty()) return@withContext null
 
             val eventJsonList = events.map { event ->
-                val audioData = if (event.audioFileName != null) {
-                    val file = AudioFileUtil.getAudioFile(context, event.audioFileName)
-                    if (file.exists()) {
-                        Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
-                    } else null
-                } else null
-
                 EventJson(
                     uuid = event.uuid.ifEmpty { java.util.UUID.randomUUID().toString() },
                     createdAt = event.createdAt,
@@ -56,7 +53,6 @@ object BackupManager {
                     address = event.address,
                     audioFileName = event.audioFileName,
                     audioDuration = event.audioDuration,
-                    audioData = audioData,
                     note = event.note,
                     label = event.label,
                     status = event.status
@@ -64,85 +60,228 @@ object BackupManager {
             }
 
             val backup = BackupFile(
-                exportedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                exportedAt = java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 eventCount = eventJsonList.size,
                 events = eventJsonList
             )
 
             gson.toJson(backup)
         }
+    }
 
-    // ──────────────── 通道 A：导出到文件 ────────────────
+    // ---- ZIP 打包 ----
 
     /**
-     * 通过 MediaStore 将备份 JSON 写入 Downloads 目录。
+     * 创建备份 ZIP 文件到 cache 临时目录。
+     * ZIP 结构：backup.json + audio/ 子目录
+     * 返回临时 File 对象，调用方负责使用后清理。
+     */
+    suspend fun createBackupZip(context: Context, eventStore: EventStore): File? {
+        return withContext(Dispatchers.IO) {
+            val json = generateBackupJson(context, eventStore) ?: return@withContext null
+            val zipFile = File(context.cacheDir, generateBackupFileName())
+
+            FileOutputStream(zipFile).use { fos ->
+                ZipOutputStream(fos).use { zos ->
+                    // 1) 写入 backup.json
+                    zos.putNextEntry(ZipEntry("backup.json"))
+                    zos.write(json.toByteArray(Charsets.UTF_8))
+                    zos.closeEntry()
+
+                    // 2) 写入音频文件（仅导出实际存在的文件）
+                    val events = eventStore.queryAll()
+                    for (event in events) {
+                        val name = event.audioFileName ?: continue
+                        val audioFile = AudioFileUtil.getAudioFile(context, name)
+                        if (!audioFile.exists()) continue
+
+                        zos.putNextEntry(ZipEntry("audio/" + name))
+                        FileInputStream(audioFile).use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+            }
+
+            zipFile
+        }
+    }
+
+    // ---- 通道 A：导出到文件 ----
+
+    /**
+     * 通过 MediaStore 将备份 ZIP 写入 Downloads 目录。
      * 返回保存的文件名用于 Toast 提示。
      */
-    suspend fun exportToFile(context: Context, eventStore: EventStore): String? =
-        withContext(Dispatchers.IO) {
-            val json = generateBackupJson(context, eventStore) ?: return@withContext null
-            val fileName = generateBackupFileName()
+    suspend fun exportToFile(context: Context, eventStore: EventStore): String? {
+        return withContext(Dispatchers.IO) {
+            val zipFile = createBackupZip(context, eventStore) ?: return@withContext null
+            val fileName = zipFile.name
 
             val values = ContentValues().apply {
                 put(MediaStore.Files.FileColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.Files.FileColumns.MIME_TYPE, "application/json")
+                put(MediaStore.Files.FileColumns.MIME_TYPE, "application/zip")
                 put(MediaStore.Files.FileColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             }
 
             val uri = context.contentResolver.insert(
                 MediaStore.Files.getContentUri("external"), values
-            ) ?: return@withContext null
+            ) ?: run { zipFile.delete(); return@withContext null }
 
             context.contentResolver.openOutputStream(uri)?.use { stream ->
-                stream.write(json.toByteArray(Charsets.UTF_8))
+                zipFile.inputStream().use { it.copyTo(stream) }
             }
 
+            zipFile.delete()
             fileName
         }
+    }
 
-    // ──────────────── 通道 B：分享备份 ────────────────
+    // ---- 通道 B：分享备份 ----
 
     /**
-     * 生成备份 JSON、写入 cache 临时文件，返回分享 Intent。
+     * 创建备份 ZIP 到 cache 临时文件，返回分享 Intent。
      * 返回 null 表示数据库为空。
      */
-    suspend fun createShareIntent(context: Context, eventStore: EventStore): Intent? =
-        withContext(Dispatchers.IO) {
-            val json = generateBackupJson(context, eventStore) ?: return@withContext null
-            val fileName = generateBackupFileName()
-
-            val cacheFile = File(context.cacheDir, fileName)
-            cacheFile.writeText(json, Charsets.UTF_8)
+    suspend fun createShareIntent(context: Context, eventStore: EventStore): Intent? {
+        return withContext(Dispatchers.IO) {
+            val zipFile = createBackupZip(context, eventStore) ?: return@withContext null
 
             val uri = FileProvider.getUriForFile(
                 context,
-                "${context.packageName}.fileprovider",
-                cacheFile
+                context.packageName + ".fileprovider",
+                zipFile
             )
 
             Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = "application/zip"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         }
+    }
 
-    // ──────────────── 导入 ────────────────
+    // ---- 导入 ----
 
     /** 导入结果 */
     data class ImportResult(
-        val success: Int,  // 成功导入条数
-        val skipped: Int,  // 跳过（已存在）条数
-        val failed: Int,   // 失败条数
-        val error: String? = null  // 整体错误信息（JSON 解析失败等）
+        val success: Int,
+        val skipped: Int,
+        val failed: Int,
+        val error: String? = null
     )
 
     /**
-     * 从 URI 读取备份文件并导入。
-     * 按 uuid 合并跳过重复。
+     * 从 URI 读取备份文件并导入。自动检测格式：
+     * - .zip -> v2 ZIP (JSON + 分离音频)
+     * - .json -> v1 JSON (base64 内嵌音频)
      */
-    suspend fun importFromUri(context: Context, uri: Uri, eventStore: EventStore): ImportResult =
-        withContext(Dispatchers.IO) {
+    suspend fun importFromUri(context: Context, uri: Uri, eventStore: EventStore): ImportResult {
+        return withContext(Dispatchers.IO) {
+            // 通过 ContentResolver 查询真实文件名（uri.lastPathSegment 对 content URI 不可靠）
+            var fileName = ""
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) fileName = cursor.getString(idx) ?: ""
+                }
+            }
+
+            when {
+                fileName.endsWith(".zip", ignoreCase = true) ->
+                    importFromZip(context, uri, eventStore)
+                fileName.endsWith(".json", ignoreCase = true) ->
+                    importFromJson(context, uri, eventStore)
+                else ->
+                    ImportResult(0, 0, 0, "不支持的文件格式，请选择 .zip 或 .json 备份文件")
+            }
+        }
+    }
+
+    // -- v2 ZIP 导入 --
+
+    private suspend fun importFromZip(
+        context: Context, uri: Uri, eventStore: EventStore
+    ): ImportResult {
+        return withContext(Dispatchers.IO) {
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: return@withContext ImportResult(0, 0, 0, "无法读取文件")
+
+            inputStream.use { stream ->
+                val zis = ZipInputStream(stream)
+                var backup: BackupFile? = null
+                val audioBuffers = mutableMapOf<String, ByteArray>()
+
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    when {
+                        entry.name == "backup.json" -> {
+                            val json = zis.bufferedReader().readText()
+                            try {
+                                backup = gson.fromJson(json, BackupFile::class.java)
+                            } catch (e: Exception) {
+                                return@withContext ImportResult(
+                                    0, 0, 0, "backup.json 解析失败: " + e.message
+                                )
+                            }
+                        }
+                        entry.name.startsWith("audio/") && !entry.isDirectory -> {
+                            val audioName = entry.name.removePrefix("audio/")
+                            audioBuffers[audioName] = zis.readBytes()
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+
+                val b = backup ?: return@withContext ImportResult(
+                    0, 0, 0, "ZIP 中未找到 backup.json"
+                )
+
+                var success = 0
+                var skipped = 0
+                var failed = 0
+                for (ej in b.events) {
+                    try {
+                        val uuid = ej.uuid
+                        if (uuid.isBlank()) { failed++; continue }
+                        if (eventStore.findByUuid(uuid) != null) { skipped++; continue }
+
+                        ej.audioFileName?.let { name ->
+                            audioBuffers[name]?.let { bytes ->
+                                val file = AudioFileUtil.getAudioFile(context, name)
+                                file.parentFile?.mkdirs()
+                                file.writeBytes(bytes)
+                            }
+                        }
+
+                        eventStore.insert(Event(
+                            uuid = uuid,
+                            createdAt = ej.createdAt,
+                            latitude = ej.latitude,
+                            longitude = ej.longitude,
+                            address = ej.address,
+                            audioFileName = ej.audioFileName,
+                            audioDuration = ej.audioDuration,
+                            note = ej.note,
+                            label = ej.label,
+                            status = ej.status
+                        ))
+                        success++
+                    } catch (_: Exception) { failed++ }
+                }
+
+                ImportResult(success, skipped, failed)
+            }
+        }
+    }
+
+    // -- v1 JSON 导入（向后兼容） --
+
+    private suspend fun importFromJson(
+        context: Context, uri: Uri, eventStore: EventStore
+    ): ImportResult {
+        return withContext(Dispatchers.IO) {
             // 读取 JSON
             val json: String
             try {
@@ -150,7 +289,7 @@ object BackupManager {
                     json = stream.bufferedReader().readText()
                 } ?: return@withContext ImportResult(0, 0, 0, "无法读取文件")
             } catch (e: Exception) {
-                return@withContext ImportResult(0, 0, 0, "读取文件失败: ${e.message}")
+                return@withContext ImportResult(0, 0, 0, "读取文件失败: " + e.message)
             }
 
             // 解析 JSON
@@ -158,43 +297,32 @@ object BackupManager {
             try {
                 backup = gson.fromJson(json, BackupFile::class.java)
             } catch (e: Exception) {
-                return@withContext ImportResult(0, 0, 0, "文件格式不正确: ${e.message}")
+                return@withContext ImportResult(0, 0, 0, "文件格式不正确: " + e.message)
             }
 
-            // 校验版本
-            if (backup.version != 1) {
-                return@withContext ImportResult(0, 0, 0, "不支持的备份格式版本: ${backup.version}")
-            }
+            // v1 的 audioData 字段在 EventJson 中已移除，需用 JsonObject 回退读取
+            val root = com.google.gson.JsonParser.parseString(json).asJsonObject
+            val eventsArr = root.getAsJsonArray("events")
 
             var success = 0
             var skipped = 0
             var failed = 0
-
-            for (eventJson in backup.events) {
+            for (i in 0 until backup.events.size) {
                 try {
-                    // 校验 uuid
-                    val uuid = eventJson.uuid
-                    if (uuid.isBlank()) {
-                        failed++
-                        continue
-                    }
+                    val ej = backup.events[i]
+                    val uuid = ej.uuid
+                    if (uuid.isBlank()) { failed++; continue }
+                    if (eventStore.findByUuid(uuid) != null) { skipped++; continue }
 
-                    // 检查是否已存在
-                    if (eventStore.findByUuid(uuid) != null) {
-                        skipped++
-                        continue
-                    }
-
-                    // 处理音频数据
-                    var audioFileName = eventJson.audioFileName
-                    val audioData = eventJson.audioData
-                    if (audioData != null) {
-                        val audioBytes = Base64.decode(audioData, Base64.DEFAULT)
+                    var audioFileName = ej.audioFileName
+                    val rawEntry = eventsArr.get(i).asJsonObject
+                    val audioDataB64 = rawEntry.get("audioData")?.asString
+                    if (!audioDataB64.isNullOrBlank()) {
+                        val audioBytes = Base64.decode(audioDataB64, Base64.DEFAULT)
                         val file = if (audioFileName != null) {
                             AudioFileUtil.getAudioFile(context, audioFileName)
                         } else {
-                            // 无原始文件名，用时间戳生成
-                            val name = "rec_${eventJson.createdAt}.m4a"
+                            val name = "rec_" + ej.createdAt.toString() + ".m4a"
                             audioFileName = name
                             AudioFileUtil.getAudioFile(context, name)
                         }
@@ -202,26 +330,23 @@ object BackupManager {
                         file.writeBytes(audioBytes)
                     }
 
-                    // 插入 Event（本地 DB 生成新自增 id）
-                    val event = Event(
+                    eventStore.insert(Event(
                         uuid = uuid,
-                        createdAt = eventJson.createdAt,
-                        latitude = eventJson.latitude,
-                        longitude = eventJson.longitude,
-                        address = eventJson.address,
+                        createdAt = ej.createdAt,
+                        latitude = ej.latitude,
+                        longitude = ej.longitude,
+                        address = ej.address,
                         audioFileName = audioFileName,
-                        audioDuration = eventJson.audioDuration,
-                        note = eventJson.note,
-                        label = eventJson.label,
-                        status = eventJson.status
-                    )
-                    eventStore.insert(event)
+                        audioDuration = ej.audioDuration,
+                        note = ej.note,
+                        label = ej.label,
+                        status = ej.status
+                    ))
                     success++
-                } catch (e: Exception) {
-                    failed++
-                }
+                } catch (_: Exception) { failed++ }
             }
 
             ImportResult(success, skipped, failed)
         }
+    }
 }
