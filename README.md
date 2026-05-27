@@ -29,9 +29,12 @@ MarkLine 是一个极简的 Android 签到应用。一键记录时间、位置�
 
 ## 截图
 
-<!-- 替换为实际截图 -->
 <p align="center">
-  <i>截图待补充</i>
+  <img src="docs/images/screenshot-mark.jpg" width="30%" alt="Mark 签到页" />
+  &nbsp;&nbsp;
+  <img src="docs/images/screenshot-timeline.jpg" width="30%" alt="时间轴 Line" />
+  &nbsp;&nbsp;
+  <img src="docs/images/screenshot-settings.jpg" width="30%" alt="设置页" />
 </p>
 
 ---
