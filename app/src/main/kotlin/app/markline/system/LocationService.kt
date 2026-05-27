@@ -25,8 +25,9 @@ import kotlin.coroutines.resume
  * 策略：
  *  1. 有 Google Play Services → 使用 FusedLocationProviderClient（高精度 + 省电）
  *  2. 无 Google Play Services（国产手机） → 降级到原生 LocationManager
- *  3. 优先使用 lastKnownLocation（毫秒级返回）
- *  4. 失败则发起实时定位，超时后返回 null
+ *  3. 优先请求实时位置（保证移动到新地点后定位正确）
+ *  4. 实时定位失败 → 回退到 30 秒内的缓存位置
+ *  5. 超时后返回 null
  */
 class LocationService(private val context: Context) {
 
@@ -57,54 +58,68 @@ class LocationService(private val context: Context) {
 
     /**
      * 获取当前位置。需要已持有 ACCESS_FINE_LOCATION 权限。
+     *
+     * 策略：优先请求实时位置；若失败，回退到 30 秒内的缓存位置。
+     * 避免返回上一次签到遗留的过期缓存。
+     *
      * 返回 null 表示定位失败。
      */
     @SuppressLint("MissingPermission")
     suspend fun getCurrentLocation(): LocationData? {
         if (hasPlayServices) {
             // === 路径 A：Google Play Services ===
+            // 1) 请求实时位置（优先）
+            val fresh = withTimeoutOrNull(10_000L) {
+                requestFreshLocationGms()
+            }
+            if (fresh != null) {
+                val address = resolveAddress(fresh.first, fresh.second)
+                return LocationData(fresh.first, fresh.second, address)
+            }
+
+            // 2) 实时定位失败 → 回退缓存（仅限 30 秒内的）
             val cached = withTimeoutOrNull(2_000L) {
                 getLastKnownLocationGms()
             }
-            if (cached != null) {
+            if (cached != null && System.currentTimeMillis() - cached.third < 30_000L) {
                 val address = resolveAddress(cached.first, cached.second)
                 return LocationData(cached.first, cached.second, address)
             }
 
-            val fresh = withTimeoutOrNull(8_000L) {
-                requestFreshLocationGms()
-            } ?: return null
-
-            val address = resolveAddress(fresh.first, fresh.second)
-            return LocationData(fresh.first, fresh.second, address)
+            return null
         } else {
             // === 路径 B：原生 LocationManager（国产手机） ===
+            // 1) 请求实时位置（优先）
+            val fresh = withTimeoutOrNull(12_000L) {
+                requestFreshLocationNative()
+            }
+            if (fresh != null) {
+                val address = resolveAddress(fresh.first, fresh.second)
+                return LocationData(fresh.first, fresh.second, address)
+            }
+
+            // 2) 实时定位失败 → 回退缓存（仅限 30 秒内的）
             val cached = withTimeoutOrNull(2_000L) {
                 getLastKnownLocationNative()
             }
-            if (cached != null) {
+            if (cached != null && cached.third > System.currentTimeMillis() - 30_000L) {
                 val address = resolveAddress(cached.first, cached.second)
                 return LocationData(cached.first, cached.second, address)
             }
 
-            val fresh = withTimeoutOrNull(10_000L) {
-                requestFreshLocationNative()
-            } ?: return null
-
-            val address = resolveAddress(fresh.first, fresh.second)
-            return LocationData(fresh.first, fresh.second, address)
+            return null
         }
     }
 
     // ──────────── Google Play Services 定位 ────────────
 
     @SuppressLint("MissingPermission")
-    private suspend fun getLastKnownLocationGms(): Pair<Double, Double>? =
+    private suspend fun getLastKnownLocationGms(): Triple<Double, Double, Long>? =
         suspendCancellableCoroutine { cont ->
             fusedClient!!.lastLocation
                 .addOnSuccessListener { location ->
                     if (location != null) {
-                        cont.resume(Pair(location.latitude, location.longitude))
+                        cont.resume(Triple(location.latitude, location.longitude, location.time))
                     } else {
                         cont.resume(null)
                     }
@@ -144,7 +159,7 @@ class LocationService(private val context: Context) {
     // ──────────── 原生 LocationManager 定位（无 Google Play Services） ────────────
 
     @SuppressLint("MissingPermission")
-    private suspend fun getLastKnownLocationNative(): Pair<Double, Double>? {
+    private suspend fun getLastKnownLocationNative(): Triple<Double, Double, Long>? {
         val lm = locationManager ?: return null
         // 取 GPS 和 Network 中较新的一个
         val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
@@ -157,7 +172,7 @@ class LocationService(private val context: Context) {
                 }
             } catch (_: Exception) { }
         }
-        return best?.let { Pair(it.latitude, it.longitude) }
+        return best?.let { Triple(it.latitude, it.longitude, it.time) }
     }
 
     @SuppressLint("MissingPermission")
