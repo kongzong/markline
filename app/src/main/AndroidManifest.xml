@@ -42,6 +42,7 @@
         <!-- Widget Provider -->
         <receiver
             android:name=".system.CheckinWidgetProvider"
+            android:label="@string/widget_label_1x1"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -63,6 +64,7 @@
         <!-- 2x2 签到 Widget -->
         <receiver
             android:name=".system.CheckinWidget2x2Provider"
+            android:label="@string/widget_label_2x2"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -70,18 +72,6 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info_2x2" />
-        </receiver>
-
-        <!-- 4x1 最近记录 Widget -->
-        <receiver
-            android:name=".system.RecentEventWidget4x1Provider"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_info_4x1" />
         </receiver>
 
         <!-- 录音前台服务 -->

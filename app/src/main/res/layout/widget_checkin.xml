@@ -9,7 +9,7 @@
         android:id="@+id/widget_btn_checkin"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:text="签到"
+        android:text="Mark"
         android:textColor="#FFFFFF"
         android:textSize="14sp"
         android:textStyle="bold"

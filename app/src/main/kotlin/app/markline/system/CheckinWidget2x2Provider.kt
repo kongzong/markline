@@ -11,7 +11,7 @@ import app.markline.R
 
 /**
  * 2x2 签到 Widget
- * 点击 → 直接触发签到（同 1x1）
+ * 点击 → PendingIntent.getActivity → MainActivity → 触发签到（同主页 Mark 按钮）
  */
 class CheckinWidget2x2Provider : AppWidgetProvider() {
 
@@ -23,10 +23,12 @@ class CheckinWidget2x2Provider : AppWidgetProvider() {
         appWidgetIds.forEach { id ->
             val views = RemoteViews(context.packageName, R.layout.widget_checkin_2x2)
 
-            val intent = Intent(context, WidgetCheckinReceiver::class.java).apply {
-                action = WidgetCheckinReceiver.ACTION_WIDGET_CHECKIN
+            // 点击整个 widget → 打开 App 并触发签到
+            val intent = Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_TRIGGER_CHECKIN, true)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            val pi = PendingIntent.getBroadcast(
+            val pi = PendingIntent.getActivity(
                 context, id, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )

@@ -4,8 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Address
 import android.location.Geocoder
+import android.location.LocationManager
 import android.os.Build
 import android.os.Looper
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -20,14 +23,31 @@ import kotlin.coroutines.resume
  * 定位服务封装
  *
  * 策略：
- *  1. 优先使用 lastKnownLocation（毫秒级返回）
- *  2. 失败则发起一次实时定位请求，超时 5 秒
- *  3. 签到主流程不等待此结果，异步更新 Event
+ *  1. 有 Google Play Services → 使用 FusedLocationProviderClient（高精度 + 省电）
+ *  2. 无 Google Play Services（国产手机） → 降级到原生 LocationManager
+ *  3. 优先使用 lastKnownLocation（毫秒级返回）
+ *  4. 失败则发起实时定位，超时后返回 null
  */
 class LocationService(private val context: Context) {
 
-    private val fusedClient: FusedLocationProviderClient =
-        LocationServices.getFusedLocationProviderClient(context)
+    /** 设备是否安装了 Google Play Services */
+    private val hasPlayServices: Boolean by lazy {
+        try {
+            GoogleApiAvailability.getInstance()
+                .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private val fusedClient: FusedLocationProviderClient? by lazy {
+        if (hasPlayServices) LocationServices.getFusedLocationProviderClient(context)
+        else null
+    }
+
+    private val locationManager: LocationManager? by lazy {
+        context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+    }
 
     data class LocationData(
         val latitude: Double,
@@ -41,28 +61,47 @@ class LocationService(private val context: Context) {
      */
     @SuppressLint("MissingPermission")
     suspend fun getCurrentLocation(): LocationData? {
-        // 优先使用缓存定位
-        val cached = withTimeoutOrNull(2_000L) {
-            getLastKnownLocation()
-        }
-        if (cached != null) {
-            val address = resolveAddress(cached.first, cached.second)
-            return LocationData(cached.first, cached.second, address)
-        }
+        if (hasPlayServices) {
+            // === 路径 A：Google Play Services ===
+            val cached = withTimeoutOrNull(2_000L) {
+                getLastKnownLocationGms()
+            }
+            if (cached != null) {
+                val address = resolveAddress(cached.first, cached.second)
+                return LocationData(cached.first, cached.second, address)
+            }
 
-        // 退而求其次：实时定位，超时 8 秒
-        val fresh = withTimeoutOrNull(8_000L) {
-            requestFreshLocation()
-        } ?: return null
+            val fresh = withTimeoutOrNull(8_000L) {
+                requestFreshLocationGms()
+            } ?: return null
 
-        val address = resolveAddress(fresh.first, fresh.second)
-        return LocationData(fresh.first, fresh.second, address)
+            val address = resolveAddress(fresh.first, fresh.second)
+            return LocationData(fresh.first, fresh.second, address)
+        } else {
+            // === 路径 B：原生 LocationManager（国产手机） ===
+            val cached = withTimeoutOrNull(2_000L) {
+                getLastKnownLocationNative()
+            }
+            if (cached != null) {
+                val address = resolveAddress(cached.first, cached.second)
+                return LocationData(cached.first, cached.second, address)
+            }
+
+            val fresh = withTimeoutOrNull(10_000L) {
+                requestFreshLocationNative()
+            } ?: return null
+
+            val address = resolveAddress(fresh.first, fresh.second)
+            return LocationData(fresh.first, fresh.second, address)
+        }
     }
 
+    // ──────────── Google Play Services 定位 ────────────
+
     @SuppressLint("MissingPermission")
-    private suspend fun getLastKnownLocation(): Pair<Double, Double>? =
+    private suspend fun getLastKnownLocationGms(): Pair<Double, Double>? =
         suspendCancellableCoroutine { cont ->
-            fusedClient.lastLocation
+            fusedClient!!.lastLocation
                 .addOnSuccessListener { location ->
                     if (location != null) {
                         cont.resume(Pair(location.latitude, location.longitude))
@@ -76,7 +115,7 @@ class LocationService(private val context: Context) {
         }
 
     @SuppressLint("MissingPermission")
-    private suspend fun requestFreshLocation(): Pair<Double, Double>? =
+    private suspend fun requestFreshLocationGms(): Pair<Double, Double>? =
         suspendCancellableCoroutine { cont ->
             val request = LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
@@ -86,7 +125,7 @@ class LocationService(private val context: Context) {
             val callback = object : LocationCallback() {
                 override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
                     val loc = result.lastLocation
-                    fusedClient.removeLocationUpdates(this)
+                    fusedClient!!.removeLocationUpdates(this)
                     if (loc != null) {
                         cont.resume(Pair(loc.latitude, loc.longitude))
                     } else {
@@ -96,15 +135,93 @@ class LocationService(private val context: Context) {
             }
 
             cont.invokeOnCancellation {
-                fusedClient.removeLocationUpdates(callback)
+                fusedClient!!.removeLocationUpdates(callback)
             }
 
-            fusedClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            fusedClient!!.requestLocationUpdates(request, callback, Looper.getMainLooper())
         }
+
+    // ──────────── 原生 LocationManager 定位（无 Google Play Services） ────────────
+
+    @SuppressLint("MissingPermission")
+    private suspend fun getLastKnownLocationNative(): Pair<Double, Double>? {
+        val lm = locationManager ?: return null
+        // 取 GPS 和 Network 中较新的一个
+        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+        var best: android.location.Location? = null
+        for (provider in providers) {
+            try {
+                val loc = lm.getLastKnownLocation(provider)
+                if (loc != null && (best == null || loc.time > best!!.time)) {
+                    best = loc
+                }
+            } catch (_: Exception) { }
+        }
+        return best?.let { Pair(it.latitude, it.longitude) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun requestFreshLocationNative(): Pair<Double, Double>? =
+        suspendCancellableCoroutine { cont ->
+            val lm = locationManager
+            if (lm == null) {
+                cont.resume(null)
+                return@suspendCancellableCoroutine
+            }
+
+            var resolved = false
+
+            // 优先 GPS，其次 Network
+            val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+                .filter { lm.isProviderEnabled(it) }
+
+            if (providers.isEmpty()) {
+                cont.resume(null)
+                return@suspendCancellableCoroutine
+            }
+
+            for (provider in providers) {
+                if (resolved) break
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+：使用 getCurrentLocation（更省电）
+                    lm.getCurrentLocation(
+                        provider,
+                        null,
+                        context.mainExecutor
+                    ) { location ->
+                        if (!resolved && location != null) {
+                            resolved = true
+                            cont.resume(Pair(location.latitude, location.longitude))
+                        }
+                    }
+                } else {
+                    // Android 10：使用 requestSingleUpdate
+                    @Suppress("DEPRECATION")
+                    val listener = object : android.location.LocationListener {
+                        override fun onLocationChanged(location: android.location.Location) {
+                            if (!resolved) {
+                                resolved = true
+                                cont.resume(Pair(location.latitude, location.longitude))
+                            }
+                            lm.removeUpdates(this)
+                        }
+                        override fun onProviderDisabled(provider: String) {}
+                        override fun onProviderEnabled(provider: String) {}
+                    }
+                    lm.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+                }
+            }
+
+            cont.invokeOnCancellation {
+                resolved = true
+            }
+        }
+
+    // ──────────── 逆地理编码（两者共用，无 Play Services 依赖） ────────────
 
     /**
      * 使用 Android Geocoder 逆地理编码
-     * 网络不可用时 Geocoder 可能返回空，正常返回 null 即可
      */
     private suspend fun resolveAddress(lat: Double, lon: Double): String? {
         if (!Geocoder.isPresent()) return null
@@ -129,28 +246,23 @@ class LocationService(private val context: Context) {
     }
 
     private fun Address.toDisplayString(): String {
-        // 1. 获取所有 address line，找出最完整的一条
         val lines = (0..<maxAddressLineIndex).mapNotNull { getAddressLine(it) }
             .filter { !it.isNullOrBlank() }
 
-        // 首选：找包含门牌号特征（数字结尾或含 "号/栋/座/层/室"）的行
         val bestLine = lines.firstOrNull { line ->
             line.any { it.isDigit() } || line.any { it in "号栋座层室楼单元幢" }
         } ?: lines.firstOrNull()
 
-        // 如果 bestLine 已经包含门牌号级别的信息，直接返回
         if (!bestLine.isNullOrBlank()) {
-            val hasHouseNumber = bestLine.any { it.isDigit() } || 
+            val hasHouseNumber = bestLine.any { it.isDigit() } ||
                                  bestLine.any { it in "号栋座层室楼单元幢" }
             if (hasHouseNumber && bestLine.length >= 5) return bestLine
-            // 即使没有明确门牌号但也足够长，也先保留
             if (bestLine.length >= 8) return bestLine
         }
 
-        // 2. 手拼：区/街道 + 道路名 + 门牌号
         val parts = mutableListOf<String>()
-        subLocality?.let { parts.add(it) }          // 望京街道
-        thoroughfare?.let { road ->                  // 阜通东大街
+        subLocality?.let { parts.add(it) }
+        thoroughfare?.let { road ->
             val num = extractHouseNumber()
             if (!num.isNullOrBlank()) {
                 parts.add("$road$num")
@@ -158,38 +270,27 @@ class LocationService(private val context: Context) {
                 parts.add(road)
             }
         }
-        // 3. 如果 hand-pick 也空，尝试 premise + featureName
         if (parts.isEmpty()) {
             val extra = buildString {
-                premises?.let { append(it) }         // 夏都盈座
-                featureName?.let { append(it) }      // 3号楼
+                premises?.let { append(it) }
+                featureName?.let { append(it) }
             }
             if (extra.isNotBlank()) parts.add(extra)
         }
-        // 4. 最后退到城市+区
         if (parts.isEmpty()) {
             locality?.let { parts.add(it) }
             subAdminArea?.let { parts.add(it) }
         }
 
         val result = parts.joinToString("")
-
-        // 5. 如果手拼结果还是偏短且有 bestLine，把 bestLine 用作前缀
         return if (result.length < 5 && !bestLine.isNullOrBlank()) {
             if (bestLine.contains(result)) bestLine
             else "$bestLine$result"
         } else result.ifEmpty { bestLine ?: "" }
     }
 
-    /**
-     * 从 Address 字段中提取门牌号。
-     * 优先从 featureName 获取，其次尝试从 getAddressLine(0) 尾部数字提取。
-     */
     private fun Address.extractHouseNumber(): String? {
-        // featureName 在中文地址中通常就是门牌号（如 "6号"、"3号楼"）
         featureName?.trim()?.let { if (it.isNotBlank()) return it }
-
-        // 尝试从 address line 提取尾部数字
         val line0 = getAddressLine(0)
         if (!line0.isNullOrBlank()) {
             val match = Regex("""(\d+[号栋座层室楼]?)""").find(line0)

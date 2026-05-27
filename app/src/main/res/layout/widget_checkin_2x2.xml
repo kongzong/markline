@@ -24,7 +24,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="点击签到"
+        android:text="Mark一下"
         android:textColor="#FFFFFF"
         android:textSize="14sp"
         android:textStyle="bold" />

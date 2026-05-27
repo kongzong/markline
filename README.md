@@ -1,79 +1,171 @@
-# MarkLine v0.1
+# MarkLine
 
-> 超低摩擦的现场事件记录工具
+> 点点mark，汇聚成line — 超低摩擦的现场事件记录工具
 
-## 快速导入
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin)](https://kotlinlang.org)
+[![Compose](https://img.shields.io/badge/Jetpack%20Compose-1.7-4285F4?logo=android)](https://developer.android.com/compose)
+[![Min SDK](https://img.shields.io/badge/Min%20SDK-29-3DDC84?logo=android)](https://developer.android.com)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-1. 打开 Android Studio（推荐 Hedgehog 2023.1 或更高）
-2. **File → Open** → 选择此目录（`C:\tmp\markline`）
-3. 等待 Gradle Sync 完成（首次需要联网下载依赖，约 2~5 分钟）
-4. 连接 Android 10+ 真机或模拟器，点击 Run
+MarkLine 是一个极简的 Android 签到应用。一键记录时间、位置、录音，专注于**现场记录的超低摩擦体验**。
+
+---
+
+## 功能
+
+| 模块 | 说明 |
+|------|------|
+| 🔴 **一键签到** | 点击即记录，<200ms 响应，Toast + 震动即时反馈 |
+| 📍 **精确定位** | FusedLocation + 逆地理编码，支持门牌号解析，WGS-84 → GCJ-02 自动纠偏 |
+| 🎙️ **现场录音** | 前台服务录制，M4A/AAC 格式，支持补录 |
+| 📋 **时间轴** | 按天分组，7 天内展开 / 旧记录折叠，支持全文搜索 |
+| 🏷️ **主题标签** | 自定义 label 对签到分类，快速筛选同类事件 |
+| 🧩 **桌面小组件** | 1×1 快捷签到、2×2 大按钮签到 |
+| 💾 **数据备份** | ZIP 打包导出（JSON + 音频文件），一键导入合并，UUID 去重 |
+| 🌙 **深色模式** | 完整适配 Material3 深色主题 |
+| 🔔 **通知提醒** | 签到完成后推送通知，点击直达详情 |
+
+---
+
+## 截图
+
+<!-- 替换为实际截图 -->
+<p align="center">
+  <i>截图待补充</i>
+</p>
+
+---
+
+## 快速开始
+
+### 环境要求
+
+- Android Studio Hedgehog (2023.1) 或更高
+- JDK 17+
+- Android 10+ (API 29) 设备或模拟器
+
+### 构建
+
+```bash
+# 克隆仓库
+git clone https://github.com/kongzong/markline.git
+cd markline
+
+# 构建 Debug APK
+./gradlew assembleDebug
+
+# APK 输出路径
+# app/build/outputs/apk/debug/app-debug.apk
+```
+
+### 安装
+
+```bash
+# 通过 ADB 安装
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
 
 ## 项目结构
 
 ```
-app/src/main/kotlin/com/example/markline/
-├── MainActivity.kt          # 入口，底部导航（签到/历史/设置）
-├── MarkLineApp.kt           # Application 单例，手动依赖管理
+app/src/main/kotlin/app/markline/
+├── MainActivity.kt                  # 入口，导航（首页/时间轴/设置图标）
+├── MarkLineApp.kt                   # Application 单例，手动依赖管理
 ├── domain/
-│   ├── Event.kt             # 核心数据模型
-│   ├── EventStore.kt        # 存储接口
-│   └── CheckinService.kt    # 签到核心逻辑
+│   ├── Event.kt                     # 核心数据模型（uuid/label/status）
+│   ├── EventStore.kt                # 存储接口
+│   └── CheckinService.kt            # 签到核心逻辑
 ├── storage/
-│   ├── DBHelper.kt          # SQLiteOpenHelper，WAL 模式
-│   └── SQLiteEventStore.kt  # 实现
+│   ├── DBHelper.kt                  # SQLiteOpenHelper，WAL 模式，v4 迁移
+│   └── SQLiteEventStore.kt          # EventStore 实现
 ├── system/
-│   ├── LocationService.kt   # FusedLocation（缓存优先）
-│   ├── AudioRecorder.kt     # MediaRecorder AAC/M4A
-│   ├── CheckinWidgetProvider.kt  # AppWidget
-│   └── WidgetCheckinReceiver.kt  # Widget 点击处理
+│   ├── LocationService.kt           # FusedLocation（高精度 + GCJ-02 纠偏）
+│   ├── AudioRecordService.kt        # 前台录音服务（Foreground Service）
+│   ├── CheckinWidgetProvider.kt     # 1×1 签到小组件
+│   ├── CheckinWidget2x2Provider.kt  # 2×2 签到小组件
+│   └── WidgetCheckinReceiver.kt     # 小组件点击处理
 ├── ui/
-│   ├── MainScreen.kt        # 超大签到按钮
-│   ├── TimelineScreen.kt    # 时间轴历史
-│   ├── SettingsScreen.kt    # 设置页
-│   └── theme/Theme.kt       # Material3 主题
+│   ├── MainScreen.kt                # 超大签到按钮 + 实时状态
+│   ├── TimelineScreen.kt            # 时间轴 + 搜索 + 标签过滤
+│   ├── EventDetailScreen.kt         # 详情页（查看/编辑/补录）
+│   ├── EditEventScreen.kt           # 编辑页（补定位/补录音）
+│   ├── SettingsScreen.kt            # 设置（备份/帮助/关于/调试）
+│   └── theme/
+│       ├── Theme.kt                 # Material3 亮/暗主题
+│       └── Typography.kt            # 字体排版
 └── util/
-    ├── SettingsStore.kt     # DataStore 设置
-    └── TimeUtil.kt          # 时间格式化工具
+    ├── AudioFileUtil.kt             # 音频文件路径工具
+    ├── BackupData.kt                # 备份数据结构（v2 ZIP）
+    ├── BackupManager.kt             # 导入导出引擎（ZIP + JSON 兼容）
+    ├── CheckinNotifier.kt           # 签到通知管理
+    ├── SettingsStore.kt             # DataStore 设置持久化
+    ├── TimeUtil.kt                  # 时间格式化工具
+    └── Wgs84ToGcj02.kt              # 坐标纠偏算法
 ```
 
-## 技术选型
+---
 
-| 功能 | 技术 |
-|------|------|
-| 语言 | Kotlin |
+## 技术栈
+
+| 功能 | 技术选型 |
+|------|----------|
+| 语言 | Kotlin 2.0 |
 | UI | Jetpack Compose + Material3 |
-| 存储 | SQLite 原生（WAL 模式） |
-| 后台任务 | Coroutine |
+| 存储 | SQLite 原生（WAL 模式，手动迁移） |
+| 异步 | Kotlin Coroutines |
 | 设置 | DataStore Preferences |
-| 定位 | FusedLocationProvider |
-| 录音 | MediaRecorder (AAC/M4A) |
-| Widget | AppWidget (1x1) |
+| 定位 | FusedLocationProvider（高精度） |
+| 录音 | MediaRecorder → Foreground Service |
+| 序列化 | Gson |
+| 备份 | ZIP（java.util.zip） |
+| 构建优化 | R8 代码收缩 |
 
-## 核心原则
+---
 
-- **签到立即响应**（< 200ms）：写入 Event 后立即 Toast + 震动
-- **渐进增强**：定位、录音全部异步后台执行，失败不影响签到记录
-- **极薄架构**：无 Room / DI 框架，直接 SQLiteOpenHelper
+## 设计原则
 
-## 权限说明
+- **即时响应**：签到操作 < 200ms 完成，定位/录音异步后台执行，失败不影响记录
+- **极薄架构**：无 Room / DI 框架，直接 SQLiteOpenHelper，代码即文档
+- **渐进增强**：先记录时间戳，再逐步补充位置、录音、备注
+- **数据自有**：ZIP 格式完整导出，JSON 可读，音频独立文件，不被锁定在应用内
 
-| 权限 | 时机 |
+---
+
+## 权限
+
+| 权限 | 用途 | 触发时机 |
+|------|------|----------|
+| `VIBRATE` | 签到震动反馈 | 安装时自动授予 |
+| `ACCESS_FINE_LOCATION` | GPS 精确定位 | 首次签到弹窗 |
+| `ACCESS_COARSE_LOCATION` | 网络定位辅助 | 首次签到弹窗 |
+| `RECORD_AUDIO` | 现场录音 | 首次签到弹窗 |
+| `FOREGROUND_SERVICE` | 前台录音服务 | 录音时自动启用 |
+| `POST_NOTIFICATIONS` | 签到通知 | 首次签到时弹窗 |
+
+---
+
+## 数据库
+
+当前版本：**v4**
+
+| 版本 | 变更 |
 |------|------|
-| VIBRATE | 安装时自动授予（普通权限） |
-| ACCESS_FINE_LOCATION | 首次签到时弹出请求 |
-| RECORD_AUDIO | 首次签到时弹出请求 |
+| v1 | 初始表结构 |
+| v2 | 列重命名 `audio_path` → `audio_file_name` |
+| v3 | 新增 `label` 列 |
+| v4 | 新增 `uuid` 列 + 索引，支持跨设备合并 |
 
-## 定制说明
+---
 
-- 修改 Package 名：全局替换 `com.example.markline` 为你的包名
-- 修改 App 名称：编辑 `res/values/strings.xml`
-- 录音时长默认 30 秒，用户可在设置页调整（5~300 秒）
+## 开发者
 
-## v0.2 预留
+- **Kong** — 产品 & 开发
+- **WorkBuddy** — AI 协作开发
 
-代码中已注释预留位置：
-- 照片附件
-- 项目归类
-- JSON 导出
-- 云同步
+---
+
+## 许可证
+
+MIT License

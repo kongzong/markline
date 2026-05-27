@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** 通知点击后传入的 Intent Extra Key */
         const val EXTRA_OPEN_EVENT_ID = "open_event_id"
+        /** Widget 点击后触发签到（1x1 / 2x2 widget） */
+        const val EXTRA_TRIGGER_CHECKIN = "trigger_checkin"
     }
 
     private lateinit var eventStore:    SQLiteEventStore
@@ -44,6 +46,8 @@ class MainActivity : ComponentActivity() {
 
     // Compose 可观察的通知跳转 eventId
     private var pendingEventId by mutableStateOf<Long?>(null)
+    // Widget 触发的签到请求（消费后重置）
+    private var pendingTriggerCheckin by mutableStateOf(false)
 
     // Android 13+ 通知权限申请
     private val notifPermLauncher = registerForActivityResult(
@@ -73,27 +77,37 @@ class MainActivity : ComponentActivity() {
             pendingEventId = openEventId
         }
 
+        // 冷启动时从 1x1 / 2x2 Widget 带入的签到指令
+        if (intent.getBooleanExtra(EXTRA_TRIGGER_CHECKIN, false)) {
+            pendingTriggerCheckin = true
+        }
+
         setContent {
             MarkLineTheme {
                 AppNavigation(
                     eventStore     = eventStore,
                     checkinService = checkinService,
                     settingsStore  = settingsStore,
-                    initialEventId = pendingEventId
+                    initialEventId = pendingEventId,
+                    triggerCheckin = pendingTriggerCheckin,
+                    onTriggerCheckinConsumed = { pendingTriggerCheckin = false }
                 )
             }
         }
     }
 
     /**
-     * App 已在前台时收到新 Intent（如点击通知）
-     * 更新 Compose State 触发导航到对应详情页
+     * App 已在前台时收到新 Intent（如点击通知、Widget）
+     * 更新 Compose State 触发导航
      */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         val eventId = intent.getLongExtra(EXTRA_OPEN_EVENT_ID, -1L)
         if (eventId != -1L) {
             pendingEventId = eventId
+        }
+        if (intent.getBooleanExtra(EXTRA_TRIGGER_CHECKIN, false)) {
+            pendingTriggerCheckin = true
         }
     }
 }
@@ -124,10 +138,12 @@ private val bottomTabs = listOf(
 
 @Composable
 private fun AppNavigation(
-    eventStore:     SQLiteEventStore,
-    checkinService: CheckinService,
-    settingsStore:  SettingsStore,
-    initialEventId: Long? = null
+    eventStore:               SQLiteEventStore,
+    checkinService:           CheckinService,
+    settingsStore:            SettingsStore,
+    initialEventId:           Long? = null,
+    triggerCheckin:           Boolean = false,
+    onTriggerCheckinConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -207,6 +223,8 @@ private fun AppNavigation(
                 MainScreen(
                     checkinService       = checkinService,
                     settingsStore        = settingsStore,
+                    triggerCheckin       = triggerCheckin,
+                    onTriggerCheckinConsumed = onTriggerCheckinConsumed,
                     onNavigateToHistory  = { navController.navigate(Routes.HISTORY) },
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) }
                 )

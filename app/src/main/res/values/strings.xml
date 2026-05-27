@@ -2,7 +2,9 @@
 <resources>
     <string name="app_name">MarkLine</string>
     <string name="app_slogan">Mark一下，自成Line</string>
-    <string name="widget_description">一键签到小组件</string>
+    <string name="widget_description">Mark一下，自成Line</string>
+    <string name="widget_label_1x1">Mark</string>
+    <string name="widget_label_2x2">Mark一下</string>
     <string name="checkin_success">已 Mark ✓</string>
     <string name="tab_mark">Mark</string>
     <string name="tab_line">Line</string>

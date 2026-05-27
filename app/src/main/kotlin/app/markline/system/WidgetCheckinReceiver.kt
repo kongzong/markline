@@ -49,7 +49,7 @@ class WidgetCheckinReceiver : BroadcastReceiver() {
 
         // Toast 需要在主线程
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            Toast.makeText(context, "已签到 ✓", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Marked ✓", Toast.LENGTH_SHORT).show()
         }
     }
 

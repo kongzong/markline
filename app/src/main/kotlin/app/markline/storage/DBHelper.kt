@@ -99,8 +99,20 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
     override fun onOpen(db: SQLiteDatabase) {
         super.onOpen(db)
         // 开启 WAL 模式，写入速度更快，读写不互斥
+        // 注意：如果已有其他连接打开了 WAL，enableWriteAheadLogging 会尝试先关闭再打开，
+        // 此时会报 "database is locked"。所以先检查是否已是 WAL，是则跳过。
         if (!db.isReadOnly) {
-            db.enableWriteAheadLogging()
+            try {
+                val cursor = db.rawQuery("PRAGMA journal_mode", null)
+                val current = cursor.use {
+                    if (it.moveToFirst()) it.getString(0) else null
+                }
+                if (current != null && !current.equals("wal", ignoreCase = true)) {
+                    db.enableWriteAheadLogging()
+                }
+            } catch (_: Exception) {
+                // 静默失败，不阻塞数据库打开
+            }
         }
     }
 }

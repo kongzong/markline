@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 fun MainScreen(
     checkinService: CheckinService,
     settingsStore: SettingsStore,
+    triggerCheckin: Boolean = false,
+    onTriggerCheckinConsumed: () -> Unit = {},
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
 ) {
@@ -84,6 +86,21 @@ fun MainScreen(
     ) { result ->
         if (result.values.any { it }) {
             triggerCheckin(context, checkinService, settingsStore, scope, clickScale)
+        }
+    }
+
+    // Widget 触发的签到：如果已有权限直接签到，否则走权限申请流程
+    LaunchedEffect(triggerCheckin) {
+        if (!triggerCheckin || isProcessing) return@LaunchedEffect
+        // 消费标记：重置 MainActivity 中的 flag，防止切 Tab 后重复触发
+        onTriggerCheckinConsumed()
+        val missing = permissions.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            triggerCheckin(context, checkinService, settingsStore, scope, clickScale)
+        } else {
+            launcher.launch(permissions)
         }
     }
 
