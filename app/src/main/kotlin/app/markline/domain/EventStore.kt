@@ -33,6 +33,12 @@ interface EventStore {
     fun queryLabels(): List<String>
 
     /**
+     * 按主题标签精确过滤，按 created_at 倒序
+     * 不限时间范围，最多返回 limit 条
+     */
+    fun queryByLabel(label: String, limit: Int = 200): List<Event>
+
+    /**
      * 关键字搜索：在 note、address、label、日期 中模糊匹配
      * 返回匹配结果，按 created_at 倒序，最多 200 条
      */

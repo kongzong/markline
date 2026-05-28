@@ -3,9 +3,11 @@ package app.markline.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,37 +37,66 @@ fun TimelineScreen(
 ) {
     // 状态定义：记录哪些日期被折叠
     val collapsedDates = remember { mutableStateMapOf<String, Boolean>() }
-    
+
     // 搜索状态
     var searchQuery by remember { mutableStateOf("") }
 
-    // 获取最近 7 天的记录（最新在上已经在 EventStore.queryRecent 中实现）
-    val events by produceState<List<Event>>(emptyList()) {
-        // 简单处理：查出 200 条，然后在 Compose 层过滤最近 7 天
+    // 主题过滤状态
+    var selectedLabel by remember { mutableStateOf<String?>(null) }
+    val allLabels by produceState<List<String>>(emptyList()) {
+        value = eventStore.queryLabels()
+    }
+
+    val isFiltering = selectedLabel != null
+    val isSearching = searchQuery.isNotBlank()
+
+    // ── 数据源：默认模式 — 最近 7 天 ──
+    val recentEvents by produceState<List<Event>>(emptyList(), searchQuery, selectedLabel) {
+        if (isSearching || isFiltering) return@produceState
         val all = eventStore.queryRecent(200)
         val limit = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.timeInMillis
         value = all.filter { it.createdAt >= limit }
     }
 
-    // 搜索结果（带防抖）
-    val searchResults by produceState<List<Event>>(emptyList(), searchQuery) {
+    // ── 数据源：主题过滤模式 — 不限时间 ──
+    val filteredEvents by produceState<List<Event>>(emptyList(), selectedLabel, searchQuery) {
+        val label = selectedLabel ?: return@produceState
+        if (isSearching) return@produceState
+        value = eventStore.queryByLabel(label)
+    }
+
+    // ── 数据源：搜索模式（带防抖） — 不限时间 ──
+    val searchResults by produceState<List<Event>>(emptyList(), searchQuery, selectedLabel) {
         if (searchQuery.isBlank()) {
             value = emptyList()
         } else {
             delay(300) // 300ms 防抖
-            value = eventStore.search(searchQuery.trim())
+            val results = eventStore.search(searchQuery.trim())
+            // 如果同时有主题过滤，在搜索结果中进一步过滤
+            value = if (selectedLabel != null) {
+                results.filter { it.label == selectedLabel }
+            } else {
+                results
+            }
         }
     }
 
-    val isSearching = searchQuery.isNotBlank()
-    val displayEvents = if (isSearching) searchResults else events
+    // 决定显示哪组数据
+    val displayEvents = when {
+        isSearching -> searchResults
+        isFiltering -> filteredEvents
+        else -> recentEvents
+    }
+
+    // 搜索或过滤模式下展开所有分组
+    val expandAll = isSearching || isFiltering
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Line", // 修改标题为 Line
+                        "Line",
                         fontWeight = FontWeight.Bold,
                         fontSize   = 20.sp,
                         color      = MaterialTheme.colorScheme.onSurface
@@ -83,6 +113,7 @@ fun TimelineScreen(
     ) { padding ->
 
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+
             // ── 搜索栏 ──
             OutlinedTextField(
                 value = searchQuery,
@@ -111,12 +142,50 @@ fun TimelineScreen(
                 )
             )
 
+            // ── 主题过滤 Chips（仅在有标签时显示）──
+            if (allLabels.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedLabel == null,
+                        onClick = { selectedLabel = null },
+                        label = { Text("全部") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Green500,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                    allLabels.forEach { label ->
+                        FilterChip(
+                            selected = selectedLabel == label,
+                            onClick = {
+                                selectedLabel = if (selectedLabel == label) null else label
+                            },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Green500,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
             if (displayEvents.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (isSearching) "未找到匹配「${searchQuery}」的记录" else "最近 7 天暂无记录",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    val emptyText = when {
+                        isSearching && isFiltering -> "主题「${selectedLabel}」下未找到匹配「${searchQuery}」的记录"
+                        isSearching -> "未找到匹配「${searchQuery}」的记录"
+                        isFiltering -> "主题「${selectedLabel}」下暂无记录"
+                        else -> "最近 7 天暂无记录"
+                    }
+                    Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 return@Scaffold
             }
@@ -125,53 +194,52 @@ fun TimelineScreen(
             val grouped = displayEvents.groupBy { TimeUtil.formatDate(it.createdAt) }
             val today = TimeUtil.formatDate(System.currentTimeMillis())
 
-        LazyColumn(
-            modifier            = Modifier.fillMaxSize(),
-            contentPadding      = PaddingValues(bottom = 24.dp)
-        ) {
-            grouped.forEach { (dateLabel, dayEvents) ->
-                val isToday = dateLabel == today
-                // 搜索模式下全部展开，平时非当天折叠
-                val isCollapsed = if (isSearching) false
-                                  else collapsedDates.getOrDefault(dateLabel, !isToday)
+            LazyColumn(
+                modifier       = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                grouped.forEach { (dateLabel, dayEvents) ->
+                    val isToday = dateLabel == today
+                    val isCollapsed = if (expandAll) false
+                                      else collapsedDates.getOrDefault(dateLabel, !isToday)
 
-                // 日期分组 Header
-                item(key = "header_$dateLabel") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { collapsedDates[dateLabel] = !isCollapsed }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text     = "$dateLabel (${dayEvents.size})",
-                            color    = if (isToday) Green500 else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp,
-                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    // 日期分组 Header
+                    item(key = "header_$dateLabel") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { collapsedDates[dateLabel] = !isCollapsed }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text     = "$dateLabel (${dayEvents.size})",
+                                color    = if (isToday) Green500 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp,
+                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
-                }
 
-                // 分组下的记录
-                items(dayEvents, key = { it.id }) { event ->
-                    AnimatedVisibility(visible = !isCollapsed) {
-                        TimelineItem(
-                            event        = event,
-                            isLast       = event == dayEvents.last(),
-                            onClick      = { onEventClick(event.id) }
-                        )
+                    // 分组下的记录
+                    items(dayEvents, key = { it.id }) { event ->
+                        AnimatedVisibility(visible = !isCollapsed) {
+                            TimelineItem(
+                                event   = event,
+                                isLast  = event == dayEvents.last(),
+                                onClick = { onEventClick(event.id) }
+                            )
+                        }
                     }
                 }
             }
-        }
         }  // end Column
     }
 }
@@ -247,6 +315,23 @@ private fun TimelineItem(
                     if (!event.note.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(event.note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+
+                    // ── 主题小标签 ──
+                    if (!event.label.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                        ) {
+                            Text(
+                                event.label,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
 

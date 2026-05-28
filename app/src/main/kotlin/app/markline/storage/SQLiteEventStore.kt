@@ -99,6 +99,26 @@ class SQLiteEventStore(private val context: Context) : EventStore {
         return result
     }
 
+    override fun queryByLabel(label: String, limit: Int): List<Event> {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            DBHelper.TABLE_EVENT,
+            null,
+            "${DBHelper.COL_LABEL} = ?",
+            arrayOf(label),
+            null, null,
+            "${DBHelper.COL_CREATED_AT} DESC",
+            limit.toString()
+        )
+        val result = mutableListOf<Event>()
+        cursor.use {
+            while (it.moveToNext()) {
+                result.add(cursor.toEvent())
+            }
+        }
+        return result
+    }
+
     override fun search(query: String, limit: Int): List<Event> {
         val db = dbHelper.readableDatabase
         val like = "%$query%"
