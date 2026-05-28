@@ -7,43 +7,26 @@ import android.location.Geocoder
 import android.location.LocationManager
 import android.os.Build
 import android.os.Looper
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import android.util.Log
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import kotlin.coroutines.resume
 
 /**
- * 定位服务封装
+ * 定位服务封装（纯原生 LocationManager，不依赖 Google Play Services）
  *
  * 策略：
- *  1. 有 Google Play Services → 使用 FusedLocationProviderClient（高精度 + 省电）
- *  2. 无 Google Play Services（国产手机） → 降级到原生 LocationManager
- *  3. 优先请求实时位置（保证移动到新地点后定位正确）
- *  4. 实时定位失败 → 回退到 30 秒内的缓存位置
- *  5. 超时后返回 null
+ *  1. 优先请求实时位置（GPS → Network 降级）
+ *  2. 实时定位失败 → 回退到 120 秒内的缓存位置
+ *  3. 20 秒超时（覆盖 GPS 冷启动）
  */
 class LocationService(private val context: Context) {
 
-    /** 设备是否安装了 Google Play Services */
-    private val hasPlayServices: Boolean by lazy {
-        try {
-            GoogleApiAvailability.getInstance()
-                .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private val fusedClient: FusedLocationProviderClient? by lazy {
-        if (hasPlayServices) LocationServices.getFusedLocationProviderClient(context)
-        else null
+    companion object {
+        private const val TAG = "MarkLine/Loc"
+        private const val FRESH_TIMEOUT_MS  = 20_000L  // 实时定位超时（GPS 冷启动需 12-30s）
+        private const val CACHE_MAX_AGE_MS  = 60_000L  // 缓存有效期（1 分钟）
     }
 
     private val locationManager: LocationManager? by lazy {
@@ -57,111 +40,46 @@ class LocationService(private val context: Context) {
     )
 
     /**
-     * 获取当前位置。需要已持有 ACCESS_FINE_LOCATION 权限。
-     *
-     * 策略：优先请求实时位置；若失败，回退到 30 秒内的缓存位置。
-     * 避免返回上一次签到遗留的过期缓存。
-     *
+     * 获取当前位置。
+     * 需要已持有 ACCESS_FINE_LOCATION 权限。
      * 返回 null 表示定位失败。
      */
     @SuppressLint("MissingPermission")
     suspend fun getCurrentLocation(): LocationData? {
-        if (hasPlayServices) {
-            // === 路径 A：Google Play Services ===
-            // 1) 请求实时位置（优先）
-            val fresh = withTimeoutOrNull(10_000L) {
-                requestFreshLocationGms()
-            }
-            if (fresh != null) {
-                val address = resolveAddress(fresh.first, fresh.second)
-                return LocationData(fresh.first, fresh.second, address)
-            }
-
-            // 2) 实时定位失败 → 回退缓存（仅限 30 秒内的）
-            val cached = withTimeoutOrNull(2_000L) {
-                getLastKnownLocationGms()
-            }
-            if (cached != null && System.currentTimeMillis() - cached.third < 30_000L) {
-                val address = resolveAddress(cached.first, cached.second)
-                return LocationData(cached.first, cached.second, address)
-            }
-
-            return null
-        } else {
-            // === 路径 B：原生 LocationManager（国产手机） ===
-            // 1) 请求实时位置（优先）
-            val fresh = withTimeoutOrNull(12_000L) {
-                requestFreshLocationNative()
-            }
-            if (fresh != null) {
-                val address = resolveAddress(fresh.first, fresh.second)
-                return LocationData(fresh.first, fresh.second, address)
-            }
-
-            // 2) 实时定位失败 → 回退缓存（仅限 30 秒内的）
-            val cached = withTimeoutOrNull(2_000L) {
-                getLastKnownLocationNative()
-            }
-            if (cached != null && cached.third > System.currentTimeMillis() - 30_000L) {
-                val address = resolveAddress(cached.first, cached.second)
-                return LocationData(cached.first, cached.second, address)
-            }
-
-            return null
+        // 1) 请求实时位置（优先 GPS，超时后降级 Network）
+        val fresh = withTimeoutOrNull(FRESH_TIMEOUT_MS) {
+            requestFreshLocation()
         }
+        if (fresh != null) {
+            Log.d(TAG, "实时定位成功 lat=${fresh.first} lon=${fresh.second}")
+            val address = resolveAddress(fresh.first, fresh.second)
+            return LocationData(fresh.first, fresh.second, address)
+        }
+
+        Log.w(TAG, "实时定位超时/失败，尝试缓存")
+
+        // 2) 回退缓存
+        val cached = getLastKnownLocation()
+        if (cached != null) {
+            val age = System.currentTimeMillis() - cached.third
+            if (age < CACHE_MAX_AGE_MS) {
+                Log.d(TAG, "使用缓存定位 (${age / 1000}s 前) lat=${cached.first} lon=${cached.second}")
+                val address = resolveAddress(cached.first, cached.second)
+                return LocationData(cached.first, cached.second, address)
+            }
+            Log.w(TAG, "缓存过期 (${age / 1000}s > ${CACHE_MAX_AGE_MS / 1000}s)")
+        } else {
+            Log.w(TAG, "无可用缓存")
+        }
+
+        return null
     }
 
-    // ──────────── Google Play Services 定位 ────────────
+    // ──────────── 缓存定位 ────────────
 
     @SuppressLint("MissingPermission")
-    private suspend fun getLastKnownLocationGms(): Triple<Double, Double, Long>? =
-        suspendCancellableCoroutine { cont ->
-            fusedClient!!.lastLocation
-                .addOnSuccessListener { location ->
-                    if (location != null) {
-                        cont.resume(Triple(location.latitude, location.longitude, location.time))
-                    } else {
-                        cont.resume(null)
-                    }
-                }
-                .addOnFailureListener {
-                    cont.resume(null)
-                }
-        }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun requestFreshLocationGms(): Pair<Double, Double>? =
-        suspendCancellableCoroutine { cont ->
-            val request = LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                2_000L
-            ).setMaxUpdates(1).build()
-
-            val callback = object : LocationCallback() {
-                override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
-                    val loc = result.lastLocation
-                    fusedClient!!.removeLocationUpdates(this)
-                    if (loc != null) {
-                        cont.resume(Pair(loc.latitude, loc.longitude))
-                    } else {
-                        cont.resume(null)
-                    }
-                }
-            }
-
-            cont.invokeOnCancellation {
-                fusedClient!!.removeLocationUpdates(callback)
-            }
-
-            fusedClient!!.requestLocationUpdates(request, callback, Looper.getMainLooper())
-        }
-
-    // ──────────── 原生 LocationManager 定位（无 Google Play Services） ────────────
-
-    @SuppressLint("MissingPermission")
-    private suspend fun getLastKnownLocationNative(): Triple<Double, Double, Long>? {
+    private fun getLastKnownLocation(): Triple<Double, Double, Long>? {
         val lm = locationManager ?: return null
-        // 取 GPS 和 Network 中较新的一个
         val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
         var best: android.location.Location? = null
         for (provider in providers) {
@@ -170,53 +88,68 @@ class LocationService(private val context: Context) {
                 if (loc != null && (best == null || loc.time > best!!.time)) {
                     best = loc
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.w(TAG, "getLastKnownLocation($provider): ${e.message}")
+            }
         }
         return best?.let { Triple(it.latitude, it.longitude, it.time) }
     }
 
+    // ──────────── 实时定位 ────────────
+
     @SuppressLint("MissingPermission")
-    private suspend fun requestFreshLocationNative(): Pair<Double, Double>? =
+    private suspend fun requestFreshLocation(): Pair<Double, Double>? =
         suspendCancellableCoroutine { cont ->
             val lm = locationManager
             if (lm == null) {
+                Log.e(TAG, "LocationManager 不可用")
                 cont.resume(null)
                 return@suspendCancellableCoroutine
             }
 
-            var resolved = false
-
-            // 优先 GPS，其次 Network
             val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
                 .filter { lm.isProviderEnabled(it) }
 
             if (providers.isEmpty()) {
+                Log.e(TAG, "无可用定位提供者（GPS 和网络定位均未开启）")
                 cont.resume(null)
                 return@suspendCancellableCoroutine
             }
+
+            Log.d(TAG, "可用提供者: $providers")
+
+            var resolved = false
 
             for (provider in providers) {
                 if (resolved) break
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    // Android 11+：使用 getCurrentLocation（更省电）
+                    // Android 11+：使用 getCurrentLocation（专为单次定位设计）
+                    Log.d(TAG, "请求 $provider 实时定位...")
                     lm.getCurrentLocation(
                         provider,
                         null,
                         context.mainExecutor
                     ) { location ->
-                        if (!resolved && location != null) {
-                            resolved = true
-                            cont.resume(Pair(location.latitude, location.longitude))
+                        if (!resolved) {
+                            if (location != null) {
+                                resolved = true
+                                Log.d(TAG, "$provider 返回定位 lat=${location.latitude} lon=${location.longitude}")
+                                cont.resume(Pair(location.latitude, location.longitude))
+                            } else {
+                                // 修复：GPS 超时返回 null 时，也要推进逻辑
+                                Log.d(TAG, "$provider 返回空（无信号或超时）")
+                            }
                         }
                     }
                 } else {
-                    // Android 10：使用 requestSingleUpdate
+                    // Android 10
                     @Suppress("DEPRECATION")
                     val listener = object : android.location.LocationListener {
                         override fun onLocationChanged(location: android.location.Location) {
                             if (!resolved) {
                                 resolved = true
+                                Log.d(TAG, "$provider requestSingleUpdate 返回定位")
                                 cont.resume(Pair(location.latitude, location.longitude))
                             }
                             lm.removeUpdates(this)
@@ -224,6 +157,7 @@ class LocationService(private val context: Context) {
                         override fun onProviderDisabled(provider: String) {}
                         override fun onProviderEnabled(provider: String) {}
                     }
+                    Log.d(TAG, "请求 $provider requestSingleUpdate...")
                     lm.requestSingleUpdate(provider, listener, Looper.getMainLooper())
                 }
             }
@@ -233,13 +167,13 @@ class LocationService(private val context: Context) {
             }
         }
 
-    // ──────────── 逆地理编码（两者共用，无 Play Services 依赖） ────────────
+    // ──────────── 逆地理编码 ────────────
 
-    /**
-     * 使用 Android Geocoder 逆地理编码
-     */
     private suspend fun resolveAddress(lat: Double, lon: Double): String? {
-        if (!Geocoder.isPresent()) return null
+        if (!Geocoder.isPresent()) {
+            Log.w(TAG, "Geocoder 不可用")
+            return null
+        }
         return try {
             withTimeoutOrNull(3_000L) {
                 suspendCancellableCoroutine { cont ->
@@ -256,6 +190,7 @@ class LocationService(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            Log.w(TAG, "逆地理编码失败: ${e.message}")
             null
         }
     }

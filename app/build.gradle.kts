@@ -73,9 +73,6 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // FusedLocation
-    implementation(libs.play.services.location)
-
     // Gson (JSON)
     implementation(libs.gson)
 }
