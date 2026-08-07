@@ -50,13 +50,18 @@ fun TimelineScreen(
     val isFiltering = selectedLabel != null
     val isSearching = searchQuery.isNotBlank()
 
-    // ── 数据源：默认模式 — 最近 7 天 ──
-    val recentEvents by produceState<List<Event>>(emptyList(), searchQuery, selectedLabel) {
+    // ── 数据源：默认模式 — 最近 7 天，空则回退全部历史 ──
+    val recentState by produceState<Pair<List<Event>, Boolean>>(
+        emptyList<Event>() to false, searchQuery, selectedLabel
+    ) {
         if (isSearching || isFiltering) return@produceState
         val all = eventStore.queryRecent(200)
         val limit = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.timeInMillis
-        value = all.filter { it.createdAt >= limit }
+        val recent = all.filter { it.createdAt >= limit }
+        value = if (recent.isNotEmpty()) recent to false else all to true
     }
+    val recentEvents = recentState.first
+    val showingFallback = recentState.second
 
     // ── 数据源：主题过滤模式 — 不限时间 ──
     val filteredEvents by produceState<List<Event>>(emptyList(), selectedLabel, searchQuery) {
@@ -177,13 +182,43 @@ fun TimelineScreen(
                 }
             }
 
+            // ── 回退提示条（7天无记录时显示更早历史）──
+            if (showingFallback && !isSearching && !isFiltering) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.History, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "最近 7 天无记录，已显示更早的历史记录",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             if (displayEvents.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val emptyText = when {
                         isSearching && isFiltering -> "主题「${selectedLabel}」下未找到匹配「${searchQuery}」的记录"
                         isSearching -> "未找到匹配「${searchQuery}」的记录"
                         isFiltering -> "主题「${selectedLabel}」下暂无记录"
-                        else -> "最近 7 天暂无记录"
+                        else -> "暂无签到记录，去首页点击 Mark 开始第一条"
                     }
                     Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
