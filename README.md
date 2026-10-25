@@ -58,7 +58,7 @@ MarkLine 暂未内置语音识别，但可利用系统输入法的麦克风功�
   &nbsp;
   <img src="docs/images/screenshot-detail-photos.svg" width="23%" alt="事件详情照片画廊" />
   &nbsp;
-  <img src="docs/images/screenshot-settings.jpg" width="23%" alt="设置页" />
+  <img src="docs/images/screenshot-settings.svg" width="23%" alt="设置页" />
 </p>
 
 ---
