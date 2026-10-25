@@ -5,7 +5,8 @@
 
   <text x="20" y="52" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="20" font-weight="500" fill="#2C2C2A">MarkLine</text>
   <g stroke="#5F5E5A" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 316 40 h 18 l -6 8 v 8 l -6 3 v -11 z"/>
+    <circle cx="326" cy="49" r="11"/>
+    <path d="M 326 42.5 V 49 L 330.5 52"/>
   </g>
 
   <rect x="16" y="84" width="328" height="120" rx="16" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
