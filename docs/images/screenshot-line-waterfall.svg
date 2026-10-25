@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 760" role="img">
+  <title>Line 瀑布流界面设计图</title>
+  <desc>MarkLine 时间线页面：两列瀑布流卡片，带照片记录与日期分组</desc>
+  <rect x="0" y="0" width="360" height="760" rx="28" fill="#FFFFFF" stroke="#D9D9D4" stroke-width="2"/>
+  <rect x="0" y="0" width="360" height="760" rx="28" fill="none" stroke="#D9D9D4" stroke-width="2"/>
+
+  <text x="20" y="52" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="22" font-weight="500" fill="#2C2C2A">Line</text>
+  <g stroke="#5F5E5A" stroke-width="1.8" fill="none" stroke-linecap="round">
+    <path d="M 300 38 h 22 l -8 10 v 9 l -6 3 v -12 z"/>
+    <path d="M 336 38 h 16 M 344 38 v 16" />
+    <circle cx="316" cy="70" r="7" />
+    <path d="M 321 75 l 6 6" />
+  </g>
+
+  <rect x="16" y="76" width="328" height="38" rx="19" fill="#F1EFE8"/>
+  <circle cx="36" cy="95" r="6" fill="none" stroke="#888780" stroke-width="1.5"/>
+  <path d="M 40.5 99.5 l 5 5" stroke="#888780" stroke-width="1.5" stroke-linecap="round"/>
+  <text x="52" y="100" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="13" fill="#888780">搜索记录、地点、备注…</text>
+
+  <rect x="16" y="132" width="328" height="30" rx="8" fill="#E6F6EC"/>
+  <text x="28" y="152" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2F9E44">今天 · 10月25日</text>
+  <text x="316" y="152" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#2F9E44" text-anchor="end">6 条</text>
+
+  <g>
+    <rect x="16" y="178" width="158" height="196" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+    <rect x="16" y="178" width="158" height="128" rx="12" fill="#9FE1CB"/>
+    <circle cx="142" cy="204" r="11" fill="#FAEEDA"/>
+    <path d="M 16 276 L 56 234 L 92 272 L 118 248 L 174 296 L 174 306 L 16 306 Z" fill="#0F6E56" opacity="0.75"/>
+    <rect x="24" y="188" width="38" height="18" rx="9" fill="#0F6E56"/>
+    <text x="43" y="201" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#FFFFFF" text-anchor="middle">导入</text>
+    <text x="28" y="330" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">巡检</text>
+    <text x="28" y="350" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">14:32 · 龙虎山大道附近</text>
+  </g>
+
+  <g>
+    <rect x="186" y="178" width="158" height="132" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+    <rect x="186" y="178" width="158" height="66" rx="12" fill="#B5D4F4"/>
+    <rect x="186" y="228" width="158" height="16" fill="#B5D4F4"/>
+    <path d="M 186 236 L 220 202 L 252 232 L 276 212 L 344 262 L 344 244 L 186 244 Z" fill="#185FA5" opacity="0.7"/>
+    <text x="198" y="266" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">例会</text>
+    <text x="198" y="286" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">09:15 · 会议室</text>
+  </g>
+
+  <g>
+    <rect x="16" y="390" width="158" height="118" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+    <text x="28" y="418" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">走访</text>
+    <text x="28" y="438" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">11:20 · 天禄镇</text>
+    <rect x="28" y="452" width="90" height="8" rx="4" fill="#F1EFE8"/>
+    <rect x="28" y="468" width="120" height="8" rx="4" fill="#F1EFE8"/>
+    <rect x="28" y="484" width="70" height="8" rx="4" fill="#F1EFE8"/>
+  </g>
+
+  <g>
+    <rect x="186" y="326" width="158" height="182" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+    <rect x="186" y="326" width="158" height="114" rx="12" fill="#FAC775"/>
+    <circle cx="330" cy="352" r="10" fill="#FFFFFF" opacity="0.85"/>
+    <path d="M 186 414 L 226 376 L 260 408 L 286 386 L 344 432 L 344 440 L 186 440 Z" fill="#854F0B" opacity="0.7"/>
+    <text x="198" y="464" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">巡检</text>
+    <text x="198" y="484" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">10:05 · 贵溪市</text>
+  </g>
+
+  <g>
+    <rect x="16" y="524" width="158" height="150" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+    <rect x="16" y="524" width="158" height="84" rx="12" fill="#CECBF6"/>
+    <path d="M 16 582 L 54 546 L 88 578 L 112 558 L 174 604 L 174 608 L 16 608 Z" fill="#534AB7" opacity="0.7"/>
+    <text x="28" y="630" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">巡检</text>
+    <text x="28" y="650" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">08:40 · 冶金大道 188 号</text>
+  </g>
+
+  <g>
+    <rect x="186" y="524" width="158" height="112" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+    <text x="198" y="552" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">其他</text>
+    <text x="198" y="572" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">08:02 · 市区</text>
+    <rect x="198" y="586" width="110" height="8" rx="4" fill="#F1EFE8"/>
+    <rect x="198" y="602" width="80" height="8" rx="4" fill="#F1EFE8"/>
+  </g>
+
+  <rect x="16" y="690" width="328" height="34" rx="17" fill="#F1EFE8"/>
+  <circle cx="180" cy="707" r="9" fill="none" stroke="#888780" stroke-width="1.8"/>
+  <path d="M 180 701 a 6 6 0 0 1 0 12" fill="none" stroke="#2F9E44" stroke-width="1.8"/>
+  <text x="196" y="712" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">上滑加载更多</text>
+</svg>

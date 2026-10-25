@@ -48,11 +48,13 @@ MarkLine 暂未内置语音识别，但可利用系统输入法的麦克风功�
 ## 截图
 
 <p align="center">
-  <img src="docs/images/screenshot-mark.jpg" width="30%" alt="Mark 签到页" />
-  &nbsp;&nbsp;
-  <img src="docs/images/screenshot-timeline.jpg" width="30%" alt="时间轴 Line" />
-  &nbsp;&nbsp;
-  <img src="docs/images/screenshot-settings.jpg" width="30%" alt="设置页" />
+  <img src="docs/images/screenshot-home-checkin.svg" width="23%" alt="首页拍照签到" />
+  &nbsp;
+  <img src="docs/images/screenshot-line-waterfall.svg" width="23%" alt="Line 照片瀑布流" />
+  &nbsp;
+  <img src="docs/images/screenshot-detail-photos.svg" width="23%" alt="事件详情照片画廊" />
+  &nbsp;
+  <img src="docs/images/screenshot-settings.jpg" width="23%" alt="设置页" />
 </p>
 
 ---
