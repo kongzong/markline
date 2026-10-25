@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,7 @@ import app.markline.domain.EventStore
 import app.markline.system.AudioRecordService
 import app.markline.ui.theme.*
 import app.markline.util.AudioFileUtil
+import app.markline.util.ExifImporter
 import app.markline.util.TimeUtil
 import app.markline.util.Wgs84ToGcj02
 import kotlinx.coroutines.CancellationException
@@ -45,6 +47,18 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * 粗粒度地址启发式：不含道路/POI 特征字且很短（如「贵溪市」「江西省鹰潭市」），
+ * 视为只有行政区划级别的地址——值得重新走一次逆地理编码（含周边漂移探测）。
+ */
+private fun looksCoarseAddress(address: String?): Boolean {
+    val a = address?.trim().orEmpty()
+    if (a.isEmpty()) return true
+    if (a.contains("附近")) return false
+    val preciseChars = "路街巷弄村镇乡村组庄栋幢座层室楼厦园厂店站场街道号"
+    return a.none { it in preciseChars } && a.length <= 8
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +104,45 @@ fun EventDetailScreen(
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> }
+
+    // 现场照片选择（单张追加，可多次添加形成多图）
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                // 持久化读权限（document URI 支持，其他类型忽略）
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: Exception) { /* 非 document URI，忽略 */ }
+                val meta = ExifImporter.parsePhotoMeta(context, uri)
+                // 定位优先级：事件已有定位则保留；否则取照片 EXIF 定位
+                val cur = eventStore.findById(eventId)
+                if (cur != null && cur.latitude == null && cur.longitude == null
+                    && meta.latitude != null && meta.longitude != null
+                ) {
+                    val addr = try {
+                        app.locationService.reverseGeocode(meta.latitude, meta.longitude)
+                    } catch (_: Exception) { null }
+                    eventStore.updateEnhancement(
+                        id = eventId,
+                        latitude = meta.latitude,
+                        longitude = meta.longitude,
+                        address = addr
+                    )
+                }
+                eventStore.insertEventPhoto(
+                    eventId, uri.toString(), Event.MEDIA_SOURCE_IMPORTED, System.currentTimeMillis()
+                )
+                refreshTick++
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     // 播放逻辑
     fun togglePlay(path: String) {
@@ -157,6 +210,29 @@ fun EventDetailScreen(
         }
 
         val ev = event!!
+
+        // 「仅有经纬度、缺地址」或「已落库但是粗粒度地址（如贵溪市）」时，
+        // 反向地理编码（含周边漂移探测）并持久化。每次打开只尝试一次，避免反复探测。
+        var isResolvingAddress by remember { mutableStateOf(false) }
+        var driftAttempted by remember { mutableStateOf(false) }
+        LaunchedEffect(ev.id, ev.address) {
+            if (!isResolvingAddress && !driftAttempted &&
+                ev.latitude != null && ev.longitude != null &&
+                (ev.address == null || looksCoarseAddress(ev.address))
+            ) {
+                isResolvingAddress = true
+                driftAttempted = true
+                val addr = app.locationService.reverseGeocode(ev.latitude, ev.longitude)
+                if (addr != null && addr != ev.address) {
+                    eventStore.updateEnhancement(id = ev.id, address = addr)
+                    refreshTick++
+                }
+                isResolvingAddress = false
+            }
+        }
+
+        // 全屏照片查看
+        var showFullPhoto by remember { mutableStateOf<Uri?>(null) }
 
         Column(
             modifier = Modifier
@@ -293,7 +369,12 @@ fun EventDetailScreen(
             // ── 位置 ──
             DetailSection(icon = Icons.Outlined.LocationOn, title = "位置") {
                 if (ev.latitude != null && ev.longitude != null) {
-                    Text(text = ev.address ?: "地址解析中…", style = MaterialTheme.typography.bodyLarge)
+                    val addrText = when {
+                        !ev.address.isNullOrBlank() -> ev.address!!
+                        isResolvingAddress -> "地址解析中…"
+                        else -> "（未能解析详细地址）"
+                    }
+                    Text(text = addrText, style = MaterialTheme.typography.bodyLarge)
                     Text(text = "${ev.latitude}, ${ev.longitude}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -347,6 +428,73 @@ fun EventDetailScreen(
                                         isLocating = false
                                     }
                                 }
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            // ── 现场照片（多图画廊）──
+            val photos by produceState<List<app.markline.domain.EventPhoto>>(emptyList(), eventId, refreshTick) {
+                value = eventStore.getEventPhotos(eventId)
+            }
+            DetailSection(icon = Icons.Outlined.Photo, title = "现场照片") {
+                if (photos.isEmpty()) {
+                    Text(
+                        "点此添加现场照片",
+                        color = Green500,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.clickable { photoPicker.launch(arrayOf("image/*")) }
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        photos.forEach { p ->
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                PhotoThumbnail(
+                                    uri = Uri.parse(p.photoUri),
+                                    size = 100.dp,
+                                    onClick = { showFullPhoto = Uri.parse(p.photoUri) }
+                                )
+                                IconButton(
+                                    onClick = {
+                                        eventStore.deleteEventPhoto(p.id)
+                                        refreshTick++
+                                    },
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = "删除照片",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                        // 追加照片入口
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { photoPicker.launch(arrayOf("image/*")) }
+                        ) {
+                            Icon(
+                                Icons.Outlined.Add,
+                                contentDescription = "添加照片",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }
@@ -518,6 +666,10 @@ fun EventDetailScreen(
                     TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
                 }
             )
+        }
+
+        if (showFullPhoto != null) {
+            FullPhotoDialog(uri = showFullPhoto) { showFullPhoto = null }
         }
     }
 }

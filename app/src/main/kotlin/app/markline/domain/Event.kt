@@ -40,12 +40,23 @@ data class Event(
     val label: String? = null,
 
     /** 事件状态 */
-    val status: Int = STATUS_CREATED
+    val status: Int = STATUS_CREATED,
+
+    /** 关联照片 Uri（相册导入来源），无则为 null */
+    val photoUri: String? = null,
+
+    /** 媒体来源：0=Mark 打卡，1=相册导入 */
+    val mediaSource: Int = MEDIA_SOURCE_MARK
 ) {
     companion object {
         const val STATUS_CREATED = 0
         const val STATUS_DONE = 1
         const val STATUS_LOCATION_FAILED = 2
         const val STATUS_AUDIO_FAILED = 3
+
+        const val MEDIA_SOURCE_MARK = 0
+        const val MEDIA_SOURCE_IMPORTED = 1
+        /** 拍照签到：相机拍摄后存入 App 私有目录 */
+        const val MEDIA_SOURCE_PHOTO = 2
     }
 }

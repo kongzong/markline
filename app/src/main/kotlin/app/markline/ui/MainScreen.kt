@@ -1,11 +1,15 @@
 package app.markline.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
@@ -14,10 +18,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
@@ -32,12 +38,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import app.markline.domain.CheckinService
 import app.markline.ui.theme.Gray400
 import app.markline.ui.theme.Gray500
 import app.markline.ui.theme.Gray50
 import app.markline.ui.theme.Green500
 import app.markline.util.SettingsStore
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +58,7 @@ fun MainScreen(
     onTriggerCheckinConsumed: () -> Unit = {},
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToDetail: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -101,6 +111,45 @@ fun MainScreen(
             triggerCheckin(context, checkinService, settingsStore, scope, clickScale)
         } else {
             launcher.launch(permissions)
+        }
+    }
+
+    // ── 拍照签到：相机 ──
+    val pendingCapture = remember { mutableStateOf<Pair<Uri, File>?>(null) }
+
+    val cameraResultLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val (uri, file) = pendingCapture.value ?: return@rememberLauncherForActivityResult
+        if (result.resultCode == Activity.RESULT_OK && file.exists() && file.length() > 0) {
+            scope.launch {
+                try {
+                    val id = checkinService.photoCheckin(context, uri, file)
+                    onNavigateToDetail(id)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            // 取消或失败：清理空文件
+            file.delete()
+        }
+        pendingCapture.value = null
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startCameraCapture(context, pendingCapture, cameraResultLauncher)
+    }
+
+    fun requestPhotoCheckin() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            startCameraCapture(context, pendingCapture, cameraResultLauncher)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -177,7 +226,28 @@ fun MainScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 次级入口：拍照签到（虚线描边按钮，主按钮之下的补充方式）
+            OutlinedButton(
+                onClick = { requestPhotoCheckin() },
+                enabled = !isProcessing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 64.dp)
+                    .height(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(Green500)
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Green500)
+            ) {
+                Icon(Icons.Outlined.Photo, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("拍照签到", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
@@ -223,6 +293,25 @@ fun MainScreen(
             Spacer(modifier = Modifier.weight(1f))
         }
     }
+}
+
+/**
+ * 启动系统相机拍摄，并将照片直接存入 App 私有目录 files/photos。
+ * 使用 FileProvider 暴露 Uri，并显式授予相机写权限。
+ */
+private fun startCameraCapture(
+    context: Context,
+    pendingCapture: androidx.compose.runtime.MutableState<Pair<Uri, File>?>,
+    launcher: androidx.activity.result.ActivityResultLauncher<Intent>
+) {
+    val photosDir = File(context.filesDir, "photos").apply { if (!exists()) mkdirs() }
+    val file = File(photosDir, "mark_${UUID.randomUUID()}.jpg")
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    pendingCapture.value = uri to file
+    val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        .putExtra(MediaStore.EXTRA_OUTPUT, uri)
+        .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+    launcher.launch(intent)
 }
 
 private fun triggerCheckin(

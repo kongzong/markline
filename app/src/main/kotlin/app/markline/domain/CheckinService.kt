@@ -3,10 +3,12 @@ package app.markline.domain
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import app.markline.system.AudioRecordService
 import app.markline.system.LocationService
 import app.markline.util.CheckinNotifier
+import app.markline.util.ExifImporter
 import app.markline.util.SettingsStore
 import app.markline.util.TimeUtil
 import kotlinx.coroutines.*
@@ -198,6 +200,81 @@ class CheckinService(
                 _status.value = CheckinStatus(isProcessing = false)
             }
         }
+
+        return eventId
+    }
+
+    /**
+     * 拍照签到：使用相机拍摄的现场照片作为一条签到记录。
+     *
+     * 定位优先级：照片 EXIF 经纬度优先（最贴近拍摄点）；拍摄时无 GPS 则兜底实时定位。
+     * 时间取签到时刻（now）；不强制录音，保持超低摩擦。
+     *
+     * @param photoUri   照片 Uri（App 私有目录的 FileProvider Uri）
+     * @param storedFile 照片落盘文件（App 私有目录，用于 EXIF 解析）
+     */
+    suspend fun photoCheckin(context: Context, photoUri: Uri, storedFile: java.io.File): Long {
+        val now = System.currentTimeMillis()
+
+        // 1. 解析照片 EXIF（时间 + 经纬度）
+        val meta = ExifImporter.parsePhotoMeta(context, photoUri)
+
+        // 2. 写 Event（封面=该图）
+        val eventId = eventStore.insert(
+            Event(
+                uuid       = java.util.UUID.randomUUID().toString(),
+                createdAt  = now,
+                status     = Event.STATUS_CREATED,
+                mediaSource = Event.MEDIA_SOURCE_PHOTO,
+                photoUri   = photoUri.toString()
+            )
+        )
+        eventStore.insertEventPhoto(
+            eventId     = eventId,
+            photoUri    = photoUri.toString(),
+            mediaSource = Event.MEDIA_SOURCE_PHOTO,
+            createdAt   = now
+        )
+
+        // 3. 定位：照片 EXIF 优先，否则实时兜底
+        var latitude:  Double? = meta.latitude
+        var longitude: Double? = meta.longitude
+        var address:   String? = null
+        var finalStatus = Event.STATUS_DONE
+
+        if (latitude != null && longitude != null) {
+            address = try {
+                locationService.reverseGeocode(latitude, longitude)
+            } catch (_: Exception) { null }
+        } else {
+            val enableLocation = settingsStore.locationEnabled
+            val hasPerm = ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            if (enableLocation && hasPerm) {
+                val loc = locationService.getCurrentLocation()
+                if (loc != null) {
+                    latitude = loc.latitude
+                    longitude = loc.longitude
+                    address = loc.address
+                } else {
+                    finalStatus = Event.STATUS_LOCATION_FAILED
+                }
+            }
+        }
+        eventStore.updateEnhancement(
+            id = eventId,
+            latitude = latitude,
+            longitude = longitude,
+            address = address,
+            status = finalStatus
+        )
+
+        // 4. 完成通知
+        val timeLabel = TimeUtil.formatTime(now)
+        try {
+            CheckinNotifier.notify(context, eventId, timeLabel, address, false, finalStatus)
+        } catch (_: Exception) { /* 通知失败不影响签到完成 */ }
 
         return eventId
     }

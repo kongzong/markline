@@ -56,7 +56,13 @@ data class EventJson(
     val label: String?,
 
     @SerializedName("status")
-    val status: Int
+    val status: Int,
+
+    @SerializedName("photoUri")
+    val photoUri: String? = null,
+
+    @SerializedName("mediaSource")
+    val mediaSource: Int = 0
 )
 
 /**

@@ -27,6 +27,11 @@ class LocationService(private val context: Context) {
         private const val TAG = "MarkLine/Loc"
         private const val FRESH_TIMEOUT_MS  = 20_000L  // 实时定位超时（GPS 冷启动需 12-30s）
         private const val CACHE_MAX_AGE_MS  = 60_000L  // 缓存有效期（1 分钟）
+        private const val GEOCODE_TIMEOUT_MS = 3_000L  // 单次逆地理编码超时
+        private const val PROBE_TIMEOUT_MS   = 4_500L  // 漂移探测总预算
+        private const val PROBE_STEP_TIMEOUT_MS = 1_200L // 单个探测点超时
+        private const val MAX_DRIFT_PROBES   = 14      // 漂移探测次数上限
+        private const val PRECISION_ROAD     = 3       // 道路级精度阈值（低于则触发漂移）
     }
 
     private val locationManager: LocationManager? by lazy {
@@ -169,30 +174,163 @@ class LocationService(private val context: Context) {
 
     // ──────────── 逆地理编码 ────────────
 
+    /**
+     * 反向地理编码（供导入照片等「已有经纬度但缺地址」的场景补全地址）。
+     * 无网络/解析失败返回 null，调用方应据此回退展示。
+     */
+    suspend fun reverseGeocode(lat: Double, lon: Double): String? = resolveAddress(lat, lon)
+
+    /**
+     * 逆地理编码 + 周边漂移：
+     * 原始点只有粗粒度（如「贵溪市」）时，在周边 80/200/400 米螺旋探测道路级地址，
+     * 命中则地址文本加「附近」及距离。坐标本身永不改动，只借用地址描述。
+     * 探测超时/限流/跨区县时静默回退原粗地址，不影响签到主流程。
+     */
     private suspend fun resolveAddress(lat: Double, lon: Double): String? {
         if (!Geocoder.isPresent()) {
             Log.w(TAG, "Geocoder 不可用")
             return null
         }
         return try {
-            withTimeoutOrNull(3_000L) {
-                suspendCancellableCoroutine { cont ->
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        geocoder.getFromLocation(lat, lon, 1) { addresses ->
-                            cont.resume(addresses.firstOrNull()?.toDisplayString())
-                        }
-                    } else {
-                        @Suppress("DEPRECATION")
-                        val addresses = geocoder.getFromLocation(lat, lon, 1)
-                        cont.resume(addresses?.firstOrNull()?.toDisplayString())
-                    }
-                }
+            val list = withTimeoutOrNull(GEOCODE_TIMEOUT_MS) { geocodeOnce(lat, lon, 3) }
+            val best = pickBest(list) ?: run {
+                Log.w(TAG, "逆地理编码无结果或超时")
+                return null
+            }
+            val p0 = precisionOf(best)
+            Log.d(TAG, "逆地理编码(显示串分级) 精度=$p0 地址=${best.toDisplayString()}")
+            Log.d(TAG, "字段: featureName=${best.featureName}, thoroughfare=${best.thoroughfare}, " +
+                "subThoroughfare=${best.subThoroughfare}, subLocality=${best.subLocality}, " +
+                "locality=${best.locality}, subAdminArea=${best.subAdminArea}, " +
+                "premises=${best.premises}, " +
+                "lines=${(0 until best.maxAddressLineIndex).map { best.getAddressLine(it) }}")
+            if (p0 >= PRECISION_ROAD) {
+                return best.toDisplayString()
+            }
+            // 粗粒度：周边螺旋探测，无命中回退原地址
+            val drift = withTimeoutOrNull(PROBE_TIMEOUT_MS) { probeNearby(lat, lon, best) }
+            if (drift != null) {
+                val display = drift.address.toDisplayString()
+                val suffix = if (drift.distanceMeters >= 100) "附近（约${drift.distanceMeters}米）" else "附近"
+                Log.d(TAG, "漂移命中: $display$suffix")
+                "$display$suffix"
+            } else {
+                Log.d(TAG, "漂移未命中，回退原地址: ${best.toDisplayString()}")
+                best.toDisplayString()
             }
         } catch (e: Exception) {
             Log.w(TAG, "逆地理编码失败: ${e.message}")
             null
         }
+    }
+
+    /** 单点逆地理编码（一次网络返回最多 maxResults 个候选） */
+    private suspend fun geocodeOnce(lat: Double, lon: Double, maxResults: Int): List<Address>? {
+        val geocoder = Geocoder(context, Locale.getDefault())
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            suspendCancellableCoroutine { cont ->
+                geocoder.getFromLocation(lat, lon, maxResults) { addresses ->
+                    if (cont.isActive) cont.resume(addresses)
+                }
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            geocoder.getFromLocation(lat, lon, maxResults)
+        }
+    }
+
+    /** 从多个候选里挑精度最高的（并列取第一个，通常相关度最高） */
+    private fun pickBest(list: List<Address>?): Address? =
+        list?.maxByOrNull { precisionOf(it) }
+
+    /**
+     * 精度分级（以最终显示串为准，Address 字段只兜底）：
+     * 4 门牌 > 3 道路/POI > 2 乡镇/街道 > 1 区县 > 0 无
+     * 关键教训：Geocoder 会把行政名塞进 featureName/subThoroughfair
+     * （如「贵溪市」），按字段分级会被骗过；只信显示串里的证据字，
+     * 用户看到什么就按什么分级——「贵溪市」没有道路/门牌证据就是粗粒度。
+     */
+    private fun precisionOf(a: Address): Int {
+        val display = a.toDisplayString()
+        if (display.isEmpty()) return 0
+        if (display.any { it in "号栋座层室楼单元幢" }) return 4
+        if (hasRoadEvidence(display)) return 3
+        if (!a.subLocality.isNullOrBlank()) return 2
+        if (!a.locality.isNullOrBlank() || !a.subAdminArea.isNullOrBlank()) return 1
+        return 0
+    }
+
+    /** 显示串里是否有道路/POI 证据字（防「贵溪市」这类纯行政名滥竽充数） */
+    private fun hasRoadEvidence(s: String): Boolean {
+        val chars = "路街巷弄道桥号栋座层室楼厦园场站馆院店厂矿村庄镇乡组庄幢学区"
+        return s.any { it in chars }
+    }
+
+    private data class ProbeResult(val address: Address, val distanceMeters: Int)
+
+    /**
+     * 周边螺旋探测：80m×4 → 200m×8 → 500m×8，最多 MAX_DRIFT_PROBES 次。
+     * 只接受与原点不冲突（同区县，或任一侧缺失）的道路级地址。
+     * 探测异常（限流等）立即放弃，回退原地址。
+     */
+    private suspend fun probeNearby(lat: Double, lon: Double, origin: Address): ProbeResult? {
+        val rings = listOf(
+            80 to floatArrayOf(0f, 90f, 180f, 270f),
+            200 to floatArrayOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f),
+            500 to floatArrayOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f)
+        )
+        var probes = 0
+        for ((radius, bearings) in rings) {
+            for (b in bearings) {
+                if (probes >= MAX_DRIFT_PROBES) {
+                    Log.d(TAG, "漂移探测达上限 $MAX_DRIFT_PROBES 次，放弃")
+                    return null
+                }
+                probes++
+                val (plat, plon) = offsetByMeters(lat, lon, radius, b)
+                val found = try {
+                    withTimeoutOrNull(PROBE_STEP_TIMEOUT_MS) { geocodeOnce(plat, plon, 1) }?.firstOrNull()
+                } catch (e: Exception) {
+                    Log.w(TAG, "漂移探测中止: ${e.message}")
+                    return null
+                }
+                if (found == null) {
+                    Log.d(TAG, "漂移探测 ${radius}m@${b.toInt()}° → 无结果")
+                    continue
+                }
+                val p = precisionOf(found)
+                val display = found.toDisplayString()
+                Log.d(TAG, "漂移探测 ${radius}m@${b.toInt()}° → 精度=$p $display")
+                if (p >= PRECISION_ROAD && hasRoadEvidence(display) && sameRegion(origin, found)) {
+                    return ProbeResult(found, radius)
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * 区县一致性：仅当两侧都明确到区县且不同才拒绝（防漂到隔壁县）；
+     * 任一侧缺失时不阻拦（道路级结果常不带 locality）。
+     */
+    private fun sameRegion(a: Address, b: Address): Boolean {
+        val ra = a.locality ?: a.subAdminArea
+        val rb = b.locality ?: b.subAdminArea
+        return ra == null || rb == null || ra == rb
+    }
+
+    /** 按距离（米）和方位角（度）计算偏移点坐标（球面近似） */
+    private fun offsetByMeters(lat: Double, lon: Double, meters: Int, bearingDeg: Float): Pair<Double, Double> {
+        val d = meters / 6371000.0
+        val br = Math.toRadians(bearingDeg.toDouble())
+        val lat1 = Math.toRadians(lat)
+        val lon1 = Math.toRadians(lon)
+        val lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(br))
+        val lon2 = lon1 + Math.atan2(
+            Math.sin(br) * Math.sin(d) * Math.cos(lat1),
+            Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+        )
+        return Pair(Math.toDegrees(lat2), Math.toDegrees(lon2))
     }
 
     private fun Address.toDisplayString(): String {
@@ -211,13 +349,20 @@ class LocationService(private val context: Context) {
         }
 
         val parts = mutableListOf<String>()
-        subLocality?.let { parts.add(it) }
-        thoroughfare?.let { road ->
+        // 道路来源：thoroughfare 优先；featureName 若是道路名（含大道/路/街/巷等）也可用。
+        // 关键修复：部分后端把路名放在 featureName（如「天禄镇龙虎山大道」），
+        // thoroughfare 为 null——此前只取 subLocality，路名被丢，只剩「贵溪市」。
+        val roadName = thoroughfare?.trim()?.takeIf { it.isNotBlank() }
+            ?: featureName?.trim()?.takeIf { !it.isNullOrBlank() && hasRoadEvidence(it) }
+        if (roadName != null) {
+            val prefix = subLocality?.trim()
+                ?.takeIf { it.isNotBlank() && !roadName.contains(it) && !it.contains(roadName) }
+            if (prefix != null) parts.add(prefix)
             val num = extractHouseNumber()
-            if (!num.isNullOrBlank()) {
-                parts.add("$road$num")
+            if (!num.isNullOrBlank() && num.any { it.isDigit() } && !roadName.contains(num)) {
+                parts.add("$roadName$num")
             } else {
-                parts.add(road)
+                parts.add(roadName)
             }
         }
         if (parts.isEmpty()) {
@@ -240,7 +385,8 @@ class LocationService(private val context: Context) {
     }
 
     private fun Address.extractHouseNumber(): String? {
-        featureName?.trim()?.let { if (it.isNotBlank()) return it }
+        // featureName 可能是路名整串（如「天禄镇龙虎山大道」），只有含数字才算门牌
+        featureName?.trim()?.let { if (it.isNotBlank() && it.any { c -> c.isDigit() }) return it }
         val line0 = getAddressLine(0)
         if (!line0.isNullOrBlank()) {
             val match = Regex("""(\d+[号栋座层室楼]?)""").find(line0)

@@ -14,10 +14,11 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "markline.db"
-        const val DATABASE_VERSION = 4
+        const val DATABASE_VERSION = 6
 
         // 表名
         const val TABLE_EVENT = "event"
+        const val TABLE_EVENT_PHOTO = "event_photo"
 
         // 列名
         const val COL_ID = "id"
@@ -31,6 +32,16 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         const val COL_LABEL = "label"
         const val COL_STATUS = "status"
         const val COL_UUID = "uuid"
+        const val COL_PHOTO_URI = "photo_uri"
+        const val COL_MEDIA_SOURCE = "media_source"
+
+        // event_photo 列名
+        const val COL_EP_ID = "_id"
+        const val COL_EP_EVENT_ID = "event_id"
+        const val COL_EP_PHOTO_URI = "photo_uri"
+        const val COL_EP_MEDIA_SOURCE = "media_source"
+        const val COL_EP_CREATED_AT = "created_at"
+        const val COL_EP_SORT = "sort_order"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -47,7 +58,9 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 $COL_AUDIO_DURATION INTEGER,
                 $COL_NOTE          TEXT,
                 $COL_LABEL         TEXT,
-                $COL_STATUS        INTEGER DEFAULT 0
+                $COL_STATUS        INTEGER DEFAULT 0,
+                $COL_PHOTO_URI     TEXT,
+                $COL_MEDIA_SOURCE  INTEGER DEFAULT 0
             )
             """.trimIndent()
         )
@@ -56,6 +69,24 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         db.execSQL("CREATE INDEX idx_event_created_at ON $TABLE_EVENT($COL_CREATED_AT DESC)")
         // 加速 UUID 查找
         db.execSQL("CREATE UNIQUE INDEX idx_event_uuid ON $TABLE_EVENT($COL_UUID)")
+
+        createEventPhotoTable(db)
+    }
+
+    private fun createEventPhotoTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE $TABLE_EVENT_PHOTO (
+                ${COL_EP_ID}            INTEGER PRIMARY KEY AUTOINCREMENT,
+                ${COL_EP_EVENT_ID}      INTEGER NOT NULL,
+                ${COL_EP_PHOTO_URI}     TEXT NOT NULL,
+                ${COL_EP_MEDIA_SOURCE}  INTEGER DEFAULT 0,
+                ${COL_EP_CREATED_AT}    INTEGER,
+                ${COL_EP_SORT}          INTEGER DEFAULT 0
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX idx_ep_event_id ON $TABLE_EVENT_PHOTO($COL_EP_EVENT_ID)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -93,6 +124,15 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 db.endTransaction()
             }
             db.execSQL("CREATE UNIQUE INDEX idx_event_uuid ON $TABLE_EVENT($COL_UUID)")
+        }
+        if (oldVersion < 5) {
+            // v4 → v5: 新增 photo_uri、media_source 列（相册导入）
+            db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_PHOTO_URI TEXT")
+            db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_MEDIA_SOURCE INTEGER NOT NULL DEFAULT 0")
+        }
+        if (oldVersion < 6) {
+            // v5 → v6: 新增 event_photo 多图表（事件详情可追加现场照片）
+            createEventPhotoTable(db)
         }
     }
 

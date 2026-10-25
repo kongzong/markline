@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended)
+    implementation("androidx.compose.foundation:foundation")
     debugImplementation(libs.androidx.ui.tooling)
 
     // Navigation Compose
@@ -75,4 +76,7 @@ dependencies {
 
     // Gson (JSON)
     implementation(libs.gson)
+
+    // ExifInterface（相册导入读 EXIF 时间/经纬度）
+    implementation(libs.androidx.exifinterface)
 }

@@ -4,4 +4,8 @@
     <cache-path
         name="backup"
         path="." />
+    <!-- 拍照签到：相机拍摄的照片存入 App 私有 files/photos 目录 -->
+    <files-path
+        name="photos"
+        path="photos/" />
 </paths>

@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- 拍照签到：相机权限（运行时申请） -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- 通知权限（Android 13+ 需要运行时申请） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

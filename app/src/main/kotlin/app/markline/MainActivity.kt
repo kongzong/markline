@@ -118,6 +118,7 @@ private object Routes {
     const val HOME     = "home"
     const val HISTORY  = "history"
     const val SETTINGS = "settings"
+    const val IMPORT   = "import"
     const val DETAIL   = "detail/{eventId}"
     const val EDIT     = "edit/{eventId}"
     fun detail(id: Long) = "detail/$id"
@@ -152,6 +153,7 @@ private fun AppNavigation(
     // 详情页、编辑页、设置页不显示底部导航
     val showBottomBar = currentRoute != Routes.DETAIL &&
         currentRoute != Routes.SETTINGS &&
+        currentRoute != Routes.IMPORT &&
         !currentRoute.orEmpty().startsWith("detail/") &&
         !currentRoute.orEmpty().startsWith("edit/")
 
@@ -226,7 +228,8 @@ private fun AppNavigation(
                     triggerCheckin       = triggerCheckin,
                     onTriggerCheckinConsumed = onTriggerCheckinConsumed,
                     onNavigateToHistory  = { navController.navigate(Routes.HISTORY) },
-                    onNavigateToSettings = { navController.navigate(Routes.SETTINGS) }
+                    onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
+                    onNavigateToDetail   = { id -> navController.navigate(Routes.detail(id)) }
                 )
             }
 
@@ -234,7 +237,8 @@ private fun AppNavigation(
                 TimelineScreen(
                     eventStore   = eventStore,
                     onEventClick = { id -> navController.navigate(Routes.detail(id)) },
-                    onNavigateToSettings = { navController.navigate(Routes.SETTINGS) }
+                    onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
+                    onImport     = { navController.navigate(Routes.IMPORT) }
                 )
             }
 
@@ -243,6 +247,18 @@ private fun AppNavigation(
                     settingsStore = settingsStore,
                     eventStore    = eventStore,
                     onBack        = { navController.popBackStack() }
+                )
+            }
+
+            composable(Routes.IMPORT) {
+                ImportPreviewScreen(
+                    eventStore = eventStore,
+                    onBack     = { navController.popBackStack() },
+                    onNavigateToDetail = { id ->
+                        navController.navigate(Routes.detail(id)) {
+                            popUpTo(Routes.IMPORT) { inclusive = true }
+                        }
+                    }
                 )
             }
 

@@ -33,6 +33,15 @@ interface EventStore {
     fun queryLabels(): List<String>
 
     /**
+     * 各主题标签及其记录数（仅统计有主题的），
+     * 按条数倒序、同条数按标签名升序；用于筛选弹层展示
+     */
+    fun queryLabelCounts(): List<Pair<String, Int>>
+
+    /** 全库记录总数（含无主题记录），用于筛选弹层「全部」计数 */
+    fun countAll(): Int
+
+    /**
      * 按主题标签精确过滤，按 created_at 倒序
      * 不限时间范围，最多返回 limit 条
      */
@@ -50,15 +59,41 @@ interface EventStore {
     /** 查询最近 n 条 Event，按 created_at 倒序 */
     fun queryRecent(limit: Int): List<Event>
 
+    /**
+     * 分页查询最近 Event，按 created_at 倒序
+     * offset 从 0 开始；用于 Line 瀑布流滚动懒加载，避免一次性拉取全表
+     */
+    fun queryRecentPage(limit: Int, offset: Int): List<Event>
+
     /** 按 id 查询单条 */
     fun queryById(id: Long): Event?
 
     /** 按 uuid 查询单条（跨设备导入用） */
     fun findByUuid(uuid: String): Event?
 
+    /** 按关联照片 Uri 查询单条（相册导入去重用），同时查 event_photo 与 event 封面 */
+    fun findByPhotoUri(photoUri: String): Event?
+
+    /** 追加一张照片到指定 Event（返回新行 id） */
+    fun insertEventPhoto(
+        eventId: Long,
+        photoUri: String,
+        mediaSource: Int,
+        createdAt: Long = System.currentTimeMillis()
+    ): Long
+
+    /** 查询某 Event 的全部照片（按加入顺序）；表为空时回退到 event 封面单图（兼容旧数据） */
+    fun getEventPhotos(eventId: Long): List<EventPhoto>
+
+    /** 删除某张照片 */
+    fun deleteEventPhoto(photoId: Long)
+
+    /** 设置 / 清除 Event 封面（event.photo_uri，列表缩略图用） */
+    fun setCoverPhoto(eventId: Long, photoUri: String?)
+
     /** 别名，兼容 EventDetailScreen */
     fun findById(id: Long): Event? = queryById(id)
 
-    /** 删除单条 */
+    /** 删除单条（级联删除 event_photo 及拍照签到产生的私有文件） */
     fun deleteById(id: Long)
 }

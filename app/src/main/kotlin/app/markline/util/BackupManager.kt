@@ -55,7 +55,9 @@ object BackupManager {
                     audioDuration = event.audioDuration,
                     note = event.note,
                     label = event.label,
-                    status = event.status
+                    status = event.status,
+                    photoUri = event.photoUri,
+                    mediaSource = event.mediaSource
                 )
             }
 
@@ -265,7 +267,9 @@ object BackupManager {
                             audioDuration = ej.audioDuration,
                             note = ej.note,
                             label = ej.label,
-                            status = ej.status
+                            status = ej.status,
+                            photoUri = ej.photoUri,
+                            mediaSource = ej.mediaSource
                         ))
                         success++
                     } catch (_: Exception) { failed++ }
@@ -340,7 +344,9 @@ object BackupManager {
                         audioDuration = ej.audioDuration,
                         note = ej.note,
                         label = ej.label,
-                        status = ej.status
+                        status = ej.status,
+                        photoUri = ej.photoUri,
+                        mediaSource = ej.mediaSource
                     ))
                     success++
                 } catch (_: Exception) { failed++ }
