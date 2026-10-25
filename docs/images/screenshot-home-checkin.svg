@@ -1,49 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 760" role="img">
   <title>首页拍照签到设计图</title>
-  <desc>MarkLine 首页：Mark一下主按钮与拍照签到次级按钮</desc>
+  <desc>MarkLine 首页：Mark一下大圆钮主按钮与拍照签到次级按钮，附定位/录音状态</desc>
   <rect x="0" y="0" width="360" height="760" rx="28" fill="#FFFFFF" stroke="#D9D9D4" stroke-width="2"/>
 
-  <text x="20" y="52" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="20" font-weight="500" fill="#2C2C2A">MarkLine</text>
-  <g stroke="#5F5E5A" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="326" cy="49" r="11"/>
-    <path d="M 326 42.5 V 49 L 330.5 52"/>
+  <text x="20" y="52" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="17" font-weight="500" fill="#2C2C2A">点点mark，汇聚成line</text>
+  <circle cx="326" cy="46" r="14" fill="#F1EFE8"/>
+  <g transform="translate(318,38)" stroke="#5F5E5A" stroke-width="1.7" fill="none" stroke-linecap="round">
+    <circle cx="8" cy="8" r="3.4"/>
+    <line x1="8" y1="1" x2="8" y2="4"/>
+    <line x1="8" y1="12" x2="8" y2="15"/>
+    <line x1="1" y1="8" x2="4" y2="8"/>
+    <line x1="12" y1="8" x2="15" y2="8"/>
   </g>
 
-  <rect x="16" y="84" width="328" height="120" rx="16" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="54" cy="124" r="18" fill="#E6F6EC"/>
-  <path d="M 47 124 l 5 5 l 9 -10" stroke="#2F9E44" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="86" y="118" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">定位就绪</text>
-  <text x="86" y="140" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">GPS 精度 ±8 米 · 缓存 120 秒</text>
-  <rect x="86" y="158" width="180" height="7" rx="3.5" fill="#F1EFE8"/>
-  <rect x="86" y="158" width="126" height="7" rx="3.5" fill="#2F9E44"/>
+  <circle cx="180" cy="300" r="80" fill="#2F9E44" opacity="0.10"/>
+  <circle cx="180" cy="300" r="66" fill="#2F9E44" opacity="0.16"/>
+  <circle cx="180" cy="300" r="52" fill="#2F9E44"/>
+  <path d="M 162 300 l 12 12 l 24 -26" stroke="#FFFFFF" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="180" y="378" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="15" font-weight="500" fill="#FFFFFF" text-anchor="middle">Mark一下</text>
 
-  <rect x="16" y="230" width="328" height="104" rx="16" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="54" cy="270" r="16" fill="#E6F1FB"/>
-  <path d="M 50 270 a 4 4 0 0 1 8 0 a 4 4 0 0 0 8 0" stroke="#185FA5" stroke-width="2" fill="none" stroke-linecap="round"/>
-  <text x="86" y="264" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="13" fill="#888780">主题</text>
-  <text x="86" y="288" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="15" fill="#2C2C2A">巡检</text>
-  <path d="M 326 272 l 8 8 l 8 -8" stroke="#888780" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="180" y="412" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780" text-anchor="middle">将自动记录时间、位置和录音</text>
 
-  <rect x="16" y="352" width="328" height="104" rx="16" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="54" cy="392" r="16" fill="#FAEEDA"/>
-  <rect x="47" y="386" width="14" height="11" rx="2.5" stroke="#854F0B" stroke-width="1.8" fill="none"/>
-  <text x="86" y="386" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="13" fill="#888780">备注（可选）</text>
-  <text x="86" y="410" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#B4B2A9">说点什么，或留空…</text>
-
-  <rect x="30" y="500" width="300" height="64" rx="32" fill="#2F9E44"/>
-  <g stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="88" cy="532" r="10"/>
-    <circle cx="88" cy="532" r="4.5"/>
+  <rect x="80" y="436" width="200" height="46" rx="23" fill="#FFFFFF" stroke="#2F9E44" stroke-width="1.6"/>
+  <g transform="translate(104,447)" fill="none" stroke="#2F9E44" stroke-width="1.8" stroke-linejoin="round">
+    <rect x="0" y="5" width="24" height="17" rx="3.5"/>
+    <rect x="7.5" y="0" width="9" height="5" rx="1.5"/>
+    <circle cx="12" cy="13.5" r="4.2" fill="#2F9E44" stroke="none"/>
   </g>
-  <text x="196" y="540" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="19" font-weight="500" fill="#FFFFFF" text-anchor="middle">Mark一下</text>
+  <text x="196" y="465" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2F9E44" text-anchor="middle">拍照签到</text>
 
-  <rect x="30" y="584" width="300" height="56" rx="28" fill="#FFFFFF" stroke="#2F9E44" stroke-width="1.6" stroke-dasharray="6 5"/>
-  <g stroke="#2F9E44" stroke-width="1.8" fill="none" stroke-linejoin="round">
-    <rect x="106" y="602" width="24" height="18" rx="4"/>
-    <circle cx="118" cy="611" r="4.5"/>
-    <rect x="113" y="598" width="10" height="5" rx="1.5"/>
+  <g>
+    <circle cx="90" cy="580" r="22" fill="#E6F6EC"/>
+    <path d="M 90 569 L 99.5 587 L 80.5 587 Z" fill="#2F9E44"/>
+    <text x="90" y="622" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="middle">定位中</text>
+
+    <circle cx="180" cy="580" r="22" fill="#E6F6EC"/>
+    <circle cx="180" cy="580" r="5.5" fill="#2F9E44"/>
+    <text x="180" y="622" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="middle">录音中</text>
+
+    <circle cx="270" cy="580" r="22" fill="#E6F6EC"/>
+    <text x="270" y="585" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44" text-anchor="middle">10s</text>
+    <text x="270" y="622" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="middle">自动停止</text>
   </g>
-  <text x="196" y="618" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="15" fill="#2F9E44" text-anchor="middle">拍照签到</text>
 
-  <text x="180" y="680" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780" text-anchor="middle">拍照自动读取时间与位置，一拍即签</text>
+  <line x1="52" y1="668" x2="308" y2="668" stroke="#F1EFE8" stroke-width="1.5"/>
+  <text x="180" y="700" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780" text-anchor="middle">拍照自动读取时间与位置，一拍即签</text>
 </svg>
