@@ -22,14 +22,14 @@
   <text x="30" y="146" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">时间</text>
   <text x="70" y="146" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">2026-10-25 14:32</text>
   <text x="30" y="176" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">坐标</text>
-  <text x="70" y="176" font-family="monospace" font-size="13" fill="#2C2C2A">28.2921, 117.2116</text>
+  <text x="70" y="176" font-family="monospace" font-size="13" fill="#2C2C2A">30.2510, 120.1550</text>
   <text x="30" y="206" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">地址</text>
-  <text x="70" y="206" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2F9E44">贵溪市天禄镇龙虎山大道</text>
+  <text x="70" y="206" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2F9E44">城东区江滨路 88 号</text>
   <text x="70" y="228" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">来自照片 EXIF · 已自动解析</text>
 
   <rect x="16" y="284" width="328" height="96" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
   <text x="30" y="312" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780">备注</text>
-  <text x="30" y="338" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">3 号泵房阀门更换完成，压力恢复正常。</text>
+  <text x="30" y="338" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">3 号设备例行检修完成，运行状态良好。</text>
   <text x="30" y="360" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">现场拍照留存。</text>
 
   <text x="16" y="416" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="15" font-weight="500" fill="#2C2C2A">现场照片</text>

@@ -29,7 +29,7 @@
     <rect x="24" y="188" width="38" height="18" rx="9" fill="#0F6E56"/>
     <text x="43" y="201" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#FFFFFF" text-anchor="middle">导入</text>
     <text x="28" y="330" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">巡检</text>
-    <text x="28" y="350" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">14:32 · 龙虎山大道附近</text>
+    <text x="28" y="350" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">14:32 · 江滨路附近</text>
   </g>
 
   <g>
@@ -44,7 +44,7 @@
   <g>
     <rect x="16" y="390" width="158" height="118" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
     <text x="28" y="418" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">走访</text>
-    <text x="28" y="438" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">11:20 · 天禄镇</text>
+    <text x="28" y="438" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">11:20 · 城东镇</text>
     <rect x="28" y="452" width="90" height="8" rx="4" fill="#F1EFE8"/>
     <rect x="28" y="468" width="120" height="8" rx="4" fill="#F1EFE8"/>
     <rect x="28" y="484" width="70" height="8" rx="4" fill="#F1EFE8"/>
@@ -56,7 +56,7 @@
     <circle cx="330" cy="352" r="10" fill="#FFFFFF" opacity="0.85"/>
     <path d="M 186 414 L 226 376 L 260 408 L 286 386 L 344 432 L 344 440 L 186 440 Z" fill="#854F0B" opacity="0.7"/>
     <text x="198" y="464" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">巡检</text>
-    <text x="198" y="484" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">10:05 · 贵溪市</text>
+    <text x="198" y="484" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">10:05 · 青阳市</text>
   </g>
 
   <g>
@@ -64,7 +64,7 @@
     <rect x="16" y="524" width="158" height="84" rx="12" fill="#CECBF6"/>
     <path d="M 16 582 L 54 546 L 88 578 L 112 558 L 174 604 L 174 608 L 16 608 Z" fill="#534AB7" opacity="0.7"/>
     <text x="28" y="630" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">巡检</text>
-    <text x="28" y="650" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">08:40 · 冶金大道 188 号</text>
+    <text x="28" y="650" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">08:40 · 建设路 188 号</text>
   </g>
 
   <g>
