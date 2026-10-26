@@ -10,6 +10,7 @@ import android.util.Base64
 import androidx.core.content.FileProvider
 import app.markline.domain.Event
 import app.markline.domain.EventStore
+import app.markline.util.PhotoStore
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
@@ -36,15 +37,27 @@ object BackupManager {
     // ---- 公共导出逻辑 ----
 
     /**
-     * 生成备份 JSON 字符串（v2：不含 audio base64，音频以分离文件形式存入 ZIP）。
+     * 生成备份 JSON 字符串（v3：音频分离文件 + photos/ 照片分离文件 + 每事件多图清单）。
      * 返回 null 表示数据库为空。
      */
     suspend fun generateBackupJson(context: Context, eventStore: EventStore): String? {
         return withContext(Dispatchers.IO) {
+            // 照片本地化迁移：确保能找到的照片都进私有目录（幂等，已是本地路径的跳过）
+            PhotoStore.migrateContentUris(context, eventStore)
             val events = eventStore.queryAll()
             if (events.isEmpty()) return@withContext null
 
             val eventJsonList = events.map { event ->
+                val photos = eventStore.getEventPhotos(event.id).mapNotNull { p ->
+                    val file = PhotoStore.resolvePrivateFile(context, p.photoUri)
+                        ?: return@mapNotNull null  // 源已删除且从未本地化：跳过该图，记录保留
+                    PhotoJson(
+                        file = file.name,
+                        mediaSource = p.mediaSource,
+                        createdAt = p.createdAt,
+                        sourceUri = p.sourceUri
+                    )
+                }
                 EventJson(
                     uuid = event.uuid.ifEmpty { java.util.UUID.randomUUID().toString() },
                     createdAt = event.createdAt,
@@ -57,7 +70,9 @@ object BackupManager {
                     label = event.label,
                     status = event.status,
                     photoUri = event.photoUri,
-                    mediaSource = event.mediaSource
+                    sourceUri = event.sourceUri,
+                    mediaSource = event.mediaSource,
+                    photos = photos
                 )
             }
 
@@ -76,10 +91,15 @@ object BackupManager {
 
     /**
      * 创建备份 ZIP 文件到 cache 临时目录。
-     * ZIP 结构：backup.json + audio/ 子目录
+     * ZIP 结构：backup.json + audio/ 子目录 + photos/ 子目录
+     * @param litePhotos true=照片轻量压缩（长边 1600px、质量 80，包体小 10 倍+）；false=原图
      * 返回临时 File 对象，调用方负责使用后清理。
      */
-    suspend fun createBackupZip(context: Context, eventStore: EventStore): File? {
+    suspend fun createBackupZip(
+        context: Context,
+        eventStore: EventStore,
+        litePhotos: Boolean = false
+    ): File? {
         return withContext(Dispatchers.IO) {
             val json = generateBackupJson(context, eventStore) ?: return@withContext null
             val zipFile = File(context.cacheDir, generateBackupFileName())
@@ -102,6 +122,29 @@ object BackupManager {
                         FileInputStream(audioFile).use { it.copyTo(zos) }
                         zos.closeEntry()
                     }
+
+                    // 3) 写入照片文件（去重后打包，跨设备迁移/还原的核心）
+                    val packedNames = mutableSetOf<String>()
+                    for (event in events) {
+                        for (p in eventStore.getEventPhotos(event.id)) {
+                            val file = PhotoStore.resolvePrivateFile(context, p.photoUri) ?: continue
+                            if (!packedNames.add(file.name)) continue
+                            zos.putNextEntry(ZipEntry("photos/" + file.name))
+                            if (litePhotos) {
+                                val compressed = compressForBackup(context, file)
+                                if (compressed != null) {
+                                    FileInputStream(compressed).use { it.copyTo(zos) }
+                                    compressed.delete()
+                                } else {
+                                    // 压缩失败回退原图，保证不丢图
+                                    FileInputStream(file).use { it.copyTo(zos) }
+                                }
+                            } else {
+                                FileInputStream(file).use { it.copyTo(zos) }
+                            }
+                            zos.closeEntry()
+                        }
+                    }
                 }
             }
 
@@ -109,15 +152,47 @@ object BackupManager {
         }
     }
 
-    // ---- 通道 A：导出到文件 ----
+    /**
+     * 轻量备份：照片重编码为长边 ≤1600px、质量 80 的 JPEG。
+     * 返回 cache 临时文件（调用方用完删除）；解码失败返回 null（由调用方回退原图）。
+     */
+    private fun compressForBackup(context: Context, src: File): File? {
+        return try {
+            val bmp = android.graphics.BitmapFactory.decodeFile(src.absolutePath)
+                ?: return null
+            val longEdge = maxOf(bmp.width, bmp.height)
+            val scaled = if (longEdge > 1600) {
+                val scale = 1600f / longEdge
+                android.graphics.Bitmap.createScaledBitmap(
+                    bmp,
+                    (bmp.width * scale).toInt().coerceAtLeast(1),
+                    (bmp.height * scale).toInt().coerceAtLeast(1),
+                    true
+                )
+            } else bmp
+            val out = File(context.cacheDir, "bk_${src.nameWithoutExtension}.jpg")
+            FileOutputStream(out).use { stream ->
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+            }
+            if (scaled !== bmp) scaled.recycle()
+            bmp.recycle()
+            out
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     /**
      * 通过 MediaStore 将备份 ZIP 写入 Downloads 目录。
      * 返回保存的文件名用于 Toast 提示。
      */
-    suspend fun exportToFile(context: Context, eventStore: EventStore): String? {
+    suspend fun exportToFile(
+        context: Context,
+        eventStore: EventStore,
+        litePhotos: Boolean = false
+    ): String? {
         return withContext(Dispatchers.IO) {
-            val zipFile = createBackupZip(context, eventStore) ?: return@withContext null
+            val zipFile = createBackupZip(context, eventStore, litePhotos) ?: return@withContext null
             val fileName = zipFile.name
 
             val values = ContentValues().apply {
@@ -145,9 +220,13 @@ object BackupManager {
      * 创建备份 ZIP 到 cache 临时文件，返回分享 Intent。
      * 返回 null 表示数据库为空。
      */
-    suspend fun createShareIntent(context: Context, eventStore: EventStore): Intent? {
+    suspend fun createShareIntent(
+        context: Context,
+        eventStore: EventStore,
+        litePhotos: Boolean = false
+    ): Intent? {
         return withContext(Dispatchers.IO) {
-            val zipFile = createBackupZip(context, eventStore) ?: return@withContext null
+            val zipFile = createBackupZip(context, eventStore, litePhotos) ?: return@withContext null
 
             val uri = FileProvider.getUriForFile(
                 context,
@@ -213,6 +292,7 @@ object BackupManager {
                 val zis = ZipInputStream(stream)
                 var backup: BackupFile? = null
                 val audioBuffers = mutableMapOf<String, ByteArray>()
+                val photoBuffers = mutableMapOf<String, ByteArray>()
 
                 var entry = zis.nextEntry
                 while (entry != null) {
@@ -230,6 +310,13 @@ object BackupManager {
                         entry.name.startsWith("audio/") && !entry.isDirectory -> {
                             val audioName = entry.name.removePrefix("audio/")
                             audioBuffers[audioName] = zis.readBytes()
+                        }
+                        entry.name.startsWith("photos/") && !entry.isDirectory -> {
+                            // 仅接受纯文件名，防路径穿越
+                            val photoName = entry.name.removePrefix("photos/")
+                            if (photoName.isNotBlank() && !photoName.contains("/")) {
+                                photoBuffers[photoName] = zis.readBytes()
+                            }
                         }
                     }
                     zis.closeEntry()
@@ -257,7 +344,16 @@ object BackupManager {
                             }
                         }
 
-                        eventStore.insert(Event(
+                        // v3：落盘照片文件，photoUri 重写为本地路径
+                        val localPaths = ej.photos.mapNotNull { pj ->
+                            val bytes = photoBuffers[pj.file] ?: return@mapNotNull null
+                            val file = java.io.File(PhotoStore.photosDir(context), pj.file)
+                            file.writeBytes(bytes)
+                            file.absolutePath
+                        }
+                        val coverUri = localPaths.firstOrNull() ?: ej.photoUri
+
+                        val eventId = eventStore.insert(Event(
                             uuid = uuid,
                             createdAt = ej.createdAt,
                             latitude = ej.latitude,
@@ -268,9 +364,22 @@ object BackupManager {
                             note = ej.note,
                             label = ej.label,
                             status = ej.status,
-                            photoUri = ej.photoUri,
+                            photoUri = coverUri,
+                            sourceUri = ej.sourceUri,
                             mediaSource = ej.mediaSource
                         ))
+
+                        // v3：重建多图清单（insertEventPhoto 对已有封面不重设，需显式逐张写入）
+                        ej.photos.forEachIndexed { idx, pj ->
+                            val localPath = localPaths.getOrNull(idx) ?: return@forEachIndexed
+                            eventStore.insertEventPhoto(
+                                eventId = eventId,
+                                photoUri = localPath,
+                                mediaSource = pj.mediaSource,
+                                createdAt = pj.createdAt,
+                                sourceUri = pj.sourceUri
+                            )
+                        }
                         success++
                     } catch (_: Exception) { failed++ }
                 }

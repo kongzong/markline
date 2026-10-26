@@ -535,6 +535,8 @@ private suspend fun saveChanges(
             audioDuration = newAudioDur
         )
     }
+
+    app.markline.system.SyncWorker.onDataChanged(context)
 }
 
 @Composable

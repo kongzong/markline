@@ -1,99 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 760" role="img">
   <title>设置页设计图</title>
-  <desc>MarkLine 设置页：录音、定位、震动开关与数据管理入口</desc>
+  <desc>MarkLine 设置页：录音、定位、云同步（WebDAV）与数据管理（备份画质）</desc>
   <rect x="0" y="0" width="360" height="760" rx="28" fill="#FFFFFF" stroke="#D9D9D4" stroke-width="2"/>
 
   <text x="20" y="52" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="20" font-weight="500" fill="#2C2C2A">设置</text>
 
-  <text x="20" y="98" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">录音设置</text>
-  <rect x="16" y="106" width="328" height="108" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="36" cy="133" r="13" fill="#E6F6EC"/>
+  <text x="20" y="92" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">录音设置</text>
+  <rect x="16" y="100" width="328" height="108" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+  <circle cx="36" cy="127" r="13" fill="#E6F6EC"/>
   <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round">
-    <rect x="33" y="125" width="6" height="10" rx="3"/>
-    <path d="M 30.5 131 v 1.5 a 5.5 5.5 0 0 0 11 0 V 131"/>
-    <line x1="36" y1="138" x2="36" y2="141"/>
+    <rect x="33" y="119" width="6" height="10" rx="3"/>
+    <path d="M 30.5 125 v 1.5 a 5.5 5.5 0 0 0 11 0 V 125"/>
+    <line x1="36" y1="132" x2="36" y2="135"/>
   </g>
-  <text x="58" y="130" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">启用录音</text>
-  <text x="58" y="147" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到时自动录音</text>
-  <rect x="292" y="122" width="42" height="22" rx="11" fill="#2F9E44"/>
-  <circle cx="323" cy="133" r="9" fill="#FFFFFF"/>
-  <line x1="20" y1="160" x2="340" y2="160" stroke="#F1EFE8" stroke-width="1.5"/>
-  <circle cx="36" cy="187" r="13" fill="#E6F6EC"/>
+  <text x="58" y="124" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">启用录音</text>
+  <text x="58" y="141" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到时自动录音</text>
+  <rect x="292" y="116" width="42" height="22" rx="11" fill="#2F9E44"/>
+  <circle cx="323" cy="127" r="9" fill="#FFFFFF"/>
+  <line x1="20" y1="154" x2="340" y2="154" stroke="#F1EFE8" stroke-width="1.5"/>
+  <text x="58" y="178" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">录音时长</text>
+  <text x="58" y="195" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到后自动录音时长</text>
+  <text x="316" y="178" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780" text-anchor="end">10秒</text>
+  <path d="M 328 169 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="20" y="234" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">定位设置</text>
+  <rect x="16" y="242" width="328" height="54" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+  <circle cx="36" cy="269" r="13" fill="#E6F6EC"/>
+  <path d="M 36 277 c -5.5 -6 -7.5 -9 -7.5 -12 a 7.5 7.5 0 1 1 15 0 c 0 3 -2 6 -7.5 12 z" fill="#2F9E44"/>
+  <circle cx="36" cy="265" r="2.6" fill="#FFFFFF"/>
+  <text x="58" y="266" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">自动定位</text>
+  <text x="58" y="283" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到时自动获取位置</text>
+  <rect x="292" y="258" width="42" height="22" rx="11" fill="#2F9E44"/>
+  <circle cx="323" cy="269" r="9" fill="#FFFFFF"/>
+
+  <text x="20" y="322" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">其他</text>
+  <rect x="16" y="330" width="328" height="54" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+  <circle cx="36" cy="357" r="13" fill="#E6F6EC"/>
   <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round">
-    <circle cx="36" cy="189" r="6"/>
-    <line x1="36" y1="189" x2="39" y2="186"/>
-    <line x1="36" y1="180" x2="36" y2="178"/>
+    <rect x="33" y="350" width="6" height="14" rx="2"/>
+    <line x1="30" y1="353" x2="30" y2="361"/>
+    <line x1="42" y1="353" x2="42" y2="361"/>
+    <line x1="27" y1="355.5" x2="27" y2="358.5"/>
+    <line x1="45" y1="355.5" x2="45" y2="358.5"/>
   </g>
-  <text x="58" y="192" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">录音时长</text>
-  <text x="316" y="192" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780" text-anchor="end">10秒</text>
-  <path d="M 328 183 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="58" y="354" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">震动反馈</text>
+  <text x="58" y="371" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到时震动提示</text>
+  <rect x="292" y="346" width="42" height="22" rx="11" fill="#2F9E44"/>
+  <circle cx="323" cy="357" r="9" fill="#FFFFFF"/>
 
-  <text x="20" y="248" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">定位设置</text>
-  <rect x="16" y="256" width="328" height="54" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="36" cy="283" r="13" fill="#E6F6EC"/>
-  <path d="M 36 291 c -5.5 -6 -7.5 -9 -7.5 -12 a 7.5 7.5 0 1 1 15 0 c 0 3 -2 6 -7.5 12 z" fill="#2F9E44"/>
-  <circle cx="36" cy="279" r="2.6" fill="#FFFFFF"/>
-  <text x="58" y="280" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">自动定位</text>
-  <text x="58" y="297" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到时自动获取位置</text>
-  <rect x="292" y="272" width="42" height="22" rx="11" fill="#2F9E44"/>
-  <circle cx="323" cy="283" r="9" fill="#FFFFFF"/>
-
-  <text x="20" y="344" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">其他</text>
-  <rect x="16" y="352" width="328" height="54" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="36" cy="379" r="13" fill="#E6F6EC"/>
-  <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round">
-    <rect x="33" y="372" width="6" height="14" rx="2"/>
-    <line x1="30" y1="375" x2="30" y2="383"/>
-    <line x1="42" y1="375" x2="42" y2="383"/>
-    <line x1="27" y1="377.5" x2="27" y2="380.5"/>
-    <line x1="45" y1="377.5" x2="45" y2="380.5"/>
-  </g>
-  <text x="58" y="376" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">震动反馈</text>
-  <text x="58" y="393" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">签到时震动提示</text>
-  <rect x="292" y="368" width="42" height="22" rx="11" fill="#2F9E44"/>
-  <circle cx="323" cy="379" r="9" fill="#FFFFFF"/>
-
-  <text x="20" y="440" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">数据管理</text>
-  <rect x="16" y="448" width="328" height="162" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="36" cy="475" r="13" fill="#E6F6EC"/>
+  <text x="20" y="410" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">云同步</text>
+  <rect x="16" y="418" width="328" height="108" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+  <circle cx="36" cy="445" r="13" fill="#E6F6EC"/>
   <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 29 479 v 4 h 14 v -4"/>
-    <path d="M 36 468 v 10"/>
-    <path d="M 32.5 474.5 L 36 478 l 3.5 -3.5"/>
+    <path d="M 31 450 a 4 4 0 0 1 0.6 -7.95 a 6 6 0 0 1 11.6 1.3 a 3.9 3.9 0 0 1 -0.7 6.65 z"/>
   </g>
-  <text x="58" y="480" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">导出到文件</text>
-  <text x="316" y="480" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="end">保存到 Downloads</text>
-  <path d="M 328 471 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="20" y1="502" x2="340" y2="502" stroke="#F1EFE8" stroke-width="1.5"/>
-  <circle cx="36" cy="529" r="13" fill="#E6F6EC"/>
-  <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 30 534 v 3 h 12 v -3"/>
-    <path d="M 36 535 v -11"/>
-    <path d="M 32.5 527.5 L 36 524 l 3.5 3.5"/>
-  </g>
-  <text x="58" y="534" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">分享备份</text>
-  <text x="316" y="534" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="end">发送到微信/邮件等</text>
-  <path d="M 328 525 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="20" y1="556" x2="340" y2="556" stroke="#F1EFE8" stroke-width="1.5"/>
-  <circle cx="36" cy="583" r="13" fill="#E6F6EC"/>
-  <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 30 576 h 8 l 4 4 v 10 h -12 z"/>
-    <path d="M 36 583 v 6"/>
-    <path d="M 33.5 586.5 L 36 589 l 2.5 -2.5"/>
-  </g>
-  <text x="58" y="588" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">导入数据</text>
-  <text x="316" y="588" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="end">从备份文件恢复</text>
-  <path d="M 328 579 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="58" y="442" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">自动同步</text>
+  <text x="58" y="459" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">本地有修改自动上传，多设备保持一致</text>
+  <rect x="292" y="434" width="42" height="22" rx="11" fill="#2F9E44"/>
+  <circle cx="323" cy="445" r="9" fill="#FFFFFF"/>
+  <line x1="20" y1="472" x2="340" y2="472" stroke="#F1EFE8" stroke-width="1.5"/>
+  <text x="58" y="496" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">立即同步</text>
+  <text x="58" y="513" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780">WebDAV · 坚果云</text>
+  <text x="316" y="496" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#2F9E44" text-anchor="end">刚刚完成</text>
 
-  <text x="20" y="644" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">帮助</text>
-  <rect x="16" y="652" width="328" height="92" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
-  <circle cx="36" cy="675" r="13" fill="#E6F6EC"/>
-  <text x="36" y="680" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="13" font-weight="500" fill="#2F9E44" text-anchor="middle">?</text>
-  <text x="58" y="680" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">使用帮助</text>
-  <path d="M 328 671 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="20" y1="698" x2="340" y2="698" stroke="#F1EFE8" stroke-width="1.5"/>
-  <circle cx="36" cy="721" r="13" fill="#E6F6EC"/>
-  <text x="36" y="726" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="13" font-weight="500" fill="#2F9E44" text-anchor="middle">i</text>
-  <text x="58" y="726" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">关于我们</text>
-  <path d="M 328 717 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="20" y="552" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" font-weight="500" fill="#2F9E44">数据管理</text>
+  <rect x="16" y="560" width="328" height="162" rx="12" fill="#FFFFFF" stroke="#E4E4DF" stroke-width="1"/>
+  <circle cx="36" cy="587" r="13" fill="#E6F6EC"/>
+  <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 29 591 v 4 h 14 v -4"/>
+    <path d="M 36 580 v 10"/>
+    <path d="M 32.5 586.5 L 36 590 l 3.5 -3.5"/>
+  </g>
+  <text x="58" y="592" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">导出到文件</text>
+  <text x="316" y="592" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="end">含照片与录音</text>
+  <line x1="20" y1="614" x2="340" y2="614" stroke="#F1EFE8" stroke-width="1.5"/>
+  <circle cx="36" cy="641" r="13" fill="#E6F6EC"/>
+  <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="29" y="634" width="14" height="12" rx="2"/>
+    <circle cx="33.5" cy="638.5" r="1.5"/>
+    <path d="M 29 644 l 4.5 -4 l 3.5 3 l 3 -2.5 l 3.5 3"/>
+  </g>
+  <text x="58" y="646" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">备份画质</text>
+  <text x="316" y="646" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="12" fill="#888780" text-anchor="end">完整原图</text>
+  <path d="M 328 637 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="20" y1="668" x2="340" y2="668" stroke="#F1EFE8" stroke-width="1.5"/>
+  <circle cx="36" cy="695" r="13" fill="#E6F6EC"/>
+  <g stroke="#2F9E44" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 30 688 h 8 l 4 4 v 10 h -12 z"/>
+    <path d="M 36 695 v 6"/>
+    <path d="M 33.5 698.5 L 36 701 l 2.5 -2.5"/>
+  </g>
+  <text x="58" y="700" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="14" fill="#2C2C2A">导入数据</text>
+  <text x="316" y="700" font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif" font-size="11" fill="#888780" text-anchor="end">从备份文件恢复</text>
+  <path d="M 328 691 l 5 4 l -5 4" stroke="#B4B2A9" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

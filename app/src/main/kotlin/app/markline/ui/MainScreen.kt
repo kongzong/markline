@@ -226,28 +226,7 @@ fun MainScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 次级入口：拍照签到（虚线描边按钮，主按钮之下的补充方式）
-            OutlinedButton(
-                onClick = { requestPhotoCheckin() },
-                enabled = !isProcessing,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 64.dp)
-                    .height(48.dp),
-                shape = RoundedCornerShape(24.dp),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(Green500)
-                ),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Green500)
-            ) {
-                Icon(Icons.Outlined.Photo, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("拍照签到", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
@@ -288,6 +267,27 @@ fun MainScreen(
                         isActive = checkinStatus.countdown > 0
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 次级入口：拍照签到（置于状态行下方，与主按钮/状态构成一个整体）
+            OutlinedButton(
+                onClick = { requestPhotoCheckin() },
+                enabled = !isProcessing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 64.dp)
+                    .height(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(Green500)
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Green500)
+            ) {
+                Icon(Icons.Outlined.Photo, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("拍照签到", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(modifier = Modifier.weight(1f))

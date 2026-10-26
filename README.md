@@ -17,15 +17,17 @@ MarkLine 是一个极简的 Android 现场记录应用。一键记录时间、�
 |------|------|
 | 🔴 **一键签到** | 点击即记录，<200ms 响应，Toast + 震动即时反馈 |
 | 📷 **拍照签到** | 首页一键调起相机，自动读取照片 EXIF 时间与定位，一拍即签 |
-| 🖼️ **相册导入** | 批量导入水印相机等照片，按 EXIF 自动生成记录并归入时间线，去重防重复导入 |
+| 🖼️ **相册导入** | 批量导入水印相机等照片，按 EXIF 自动生成记录并归入时间线；照片自动复制到应用私有目录（删原图不丢），按来源去重 |
 | 📍 **精确定位** | 原生 LocationManager + 逆地理编码，120 秒定位缓存，WGS-84 → GCJ-02 自动纠偏 |
 | 🏘️ **地址精细化** | 显示串精度分级；粗地址自动螺旋漂移探测（80~500 米）补「XX路附近（约X米）」；兼容厂商后端把路名塞进 featureName 的情况 |
 | 🎙️ **现场录音** | 前台服务录制，M4A/AAC 格式，支持补录 |
-| 🌊 **照片瀑布流** | Line 两列错落网格 + 日期分组 + 滚动分页加载，大记录量不卡顿 |
+| 📜 **单列时间线** | 全设备统一单列垂直排布（全宽大卡 + 照片横幅），日期分组 + 滚动分页加载，大记录量不卡顿 |
+| 🔄 **实时刷新** | 数据变化（增删改、云同步下载）自动刷新时间线并保留滚动位置；支持下拉刷新、双击顶栏回顶 |
 | 🗂️ **多图记录** | 事件详情横向照片画廊，可追加、删除、全屏查看，一事件多图 |
 | 🔍 **搜索与筛选** | 全文搜索；主题筛选走底部弹层（带条数统计），字号不随系统字体放大 |
 | 🧩 **桌面小组件** | 1×1 快捷签到、2×2 大按钮签到 |
-| 💾 **数据备份** | ZIP 打包导出（JSON + 音频文件），一键导入合并，UUID 去重 |
+| 💾 **数据备份** | ZIP 打包导出（JSON + 照片 + 音频文件本体），一键导入合并，UUID 去重；可选完整原图或轻量压缩画质 |
+| ☁️ **WebDAV 云同步** | 支持坚果云等 WebDAV 服务，记录/照片/录音/删除双向自动同步，增量对账 + LWW 冲突处理，多设备数据一致 |
 | 🌙 **深色模式** | 完整适配 Material3 深色主题 |
 | 🔔 **通知提醒** | 签到完成后推送通知，点击直达详情 |
 
@@ -54,7 +56,7 @@ MarkLine 暂未内置语音识别，但可利用系统输入法的麦克风功�
 <p align="center">
   <img src="docs/images/screenshot-home-checkin.svg" width="23%" alt="首页拍照签到" />
   &nbsp;
-  <img src="docs/images/screenshot-line-waterfall.svg" width="23%" alt="Line 照片瀑布流" />
+  <img src="docs/images/screenshot-line-timeline.svg" width="23%" alt="Line 单列时间线" />
   &nbsp;
   <img src="docs/images/screenshot-detail-photos.svg" width="23%" alt="事件详情照片画廊" />
   &nbsp;
@@ -106,30 +108,34 @@ app/src/main/kotlin/app/markline/
 │   ├── EventStore.kt                # 存储接口（含分页/多图/标签统计）
 │   └── CheckinService.kt            # 签到核心逻辑（含拍照签到）
 ├── storage/
-│   ├── DBHelper.kt                  # SQLiteOpenHelper，WAL 模式，v6 迁移
-│   └── SQLiteEventStore.kt          # EventStore 实现
+│   ├── DBHelper.kt                  # SQLiteOpenHelper，WAL 模式，v8 迁移
+│   └── SQLiteEventStore.kt          # EventStore 实现（含全局数据版本号驱动响应式刷新）
 ├── system/
 │   ├── LocationService.kt           # 原生 LocationManager（定位缓存 + 逆地理编码 + 漂移探测）
 │   ├── AudioRecordService.kt        # 前台录音服务（Foreground Service）
+│   ├── WebDavClient.kt              # WebDAV 客户端（OkHttp，PROPFIND/PUT/MKCOL/DELETE）
+│   ├── SyncManager.kt               # 同步引擎（manifest 对账、事件 LWW、墓碑传播）
+│   ├── SyncWorker.kt                # WorkManager 周期/即时同步调度（变更去抖触发）
 │   ├── CheckinWidgetProvider.kt     # 1×1 签到小组件
 │   ├── CheckinWidget2x2Provider.kt  # 2×2 签到小组件
 │   └── WidgetCheckinReceiver.kt     # 小组件点击处理
 ├── ui/
 │   ├── MainScreen.kt                # 超大签到按钮 + 拍照签到 + 实时状态
-│   ├── TimelineScreen.kt            # 照片瀑布流 + 分页 + 搜索 + 主题筛选弹层
+│   ├── TimelineScreen.kt            # 单列时间线 + 分页 + 搜索 + 主题筛选弹层（响应式刷新/下拉刷新/双击回顶）
 │   ├── ImportPreviewScreen.kt       # 相册导入预览（主题点选 + 确认导入）
 │   ├── EventDetailScreen.kt         # 详情页（照片画廊/查看/编辑/补录）
-│   ├── PhotoThumbnail.kt            # 缩略图加载 + 全屏查看
+│   ├── PhotoThumbnail.kt            # 缩略图加载（EXIF 方向纠正） + 全屏查看
 │   ├── EditEventScreen.kt           # 编辑页（补定位/补录音）
-│   ├── SettingsScreen.kt            # 设置（备份/帮助/关于/调试）
+│   ├── SettingsScreen.kt            # 设置（云同步/备份画质/帮助/关于/调试）
 │   └── theme/
 │       ├── Theme.kt                 # Material3 亮/暗主题
 │       └── Typography.kt            # 字体排版
 └── util/
-    ├── ExifImporter.kt              # 相册导入（EXIF 解析/去重/URI 权限持久化）
+    ├── ExifImporter.kt              # 相册导入（EXIF 解析/去重/复制到私有目录）
+    ├── PhotoStore.kt                # 照片本地化存储（私有目录 + URI 迁移 + 路径解析）
     ├── AudioFileUtil.kt             # 音频文件路径工具
-    ├── BackupData.kt                # 备份数据结构（v2 ZIP）
-    ├── BackupManager.kt             # 导入导出引擎（ZIP + JSON 兼容）
+    ├── BackupData.kt                # 备份数据结构（v3 ZIP，含照片本体与来源 URI）
+    ├── BackupManager.kt             # 导入导出引擎（ZIP + JSON 兼容，画质可选）
     ├── CheckinNotifier.kt           # 签到通知管理
     ├── SettingsStore.kt             # DataStore 设置持久化
     ├── TimeUtil.kt                  # 时间格式化工具
@@ -152,6 +158,7 @@ app/src/main/kotlin/app/markline/
 | 录音 | MediaRecorder → Foreground Service |
 | 序列化 | Gson |
 | 备份 | ZIP（java.util.zip） |
+| 云同步 | OkHttp + WebDAV + WorkManager（周期/去抖触发） |
 | 构建优化 | R8 代码收缩 |
 
 ---
@@ -170,6 +177,7 @@ app/src/main/kotlin/app/markline/
 | 权限 | 用途 | 触发时机 |
 |------|------|----------|
 | `VIBRATE` | 签到震动反馈 | 安装时自动授予 |
+| `INTERNET` | 云同步访问 WebDAV 服务 | 安装时自动授予 |
 | `ACCESS_FINE_LOCATION` | GPS 精确定位 | 首次签到弹窗 |
 | `ACCESS_COARSE_LOCATION` | 网络定位辅助 | 首次签到弹窗 |
 | `RECORD_AUDIO` | 现场录音 | 首次签到弹窗 |
@@ -181,7 +189,7 @@ app/src/main/kotlin/app/markline/
 
 ## 数据库
 
-当前版本：**v6**
+当前版本：**v8**
 
 | 版本 | 变更 |
 |------|------|
@@ -191,6 +199,8 @@ app/src/main/kotlin/app/markline/
 | v4 | 新增 `uuid` 列 + 索引，支持跨设备合并 |
 | v5 | 新增 `photo_uri`、`media_source` 列，支持照片记录 |
 | v6 | 新增 `event_photo` 多图表（一事件多图） |
+| v7 | 新增 `source_uri` 列（照片本地化后保留来源 URI 作去重主键） |
+| v8 | 新增 `updated_at` 列（同步 LWW 时间戳）+ `sync_tombstone` 墓碑表 |
 
 ---
 

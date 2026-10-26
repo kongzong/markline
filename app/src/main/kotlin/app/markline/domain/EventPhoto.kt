@@ -8,14 +8,16 @@ package app.markline.domain
  *
  * @param id           自增主键
  * @param eventId      所属 Event 的 id
- * @param photoUri     照片 Uri（相册导入为 content Uri；拍照签到为 App 私有目录的 FileProvider Uri）
+ * @param photoUri     照片 Uri（新数据为私有目录绝对路径；旧数据为 content/FileProvider Uri）
  * @param mediaSource  来源：MEDIA_SOURCE_IMPORTED / MEDIA_SOURCE_PHOTO
  * @param createdAt    加入时间（毫秒），用于排序
+ * @param sourceUri    原始来源 Uri（相册导入去重用）
  */
 data class EventPhoto(
     val id: Long = 0,
     val eventId: Long,
     val photoUri: String,
     val mediaSource: Int = Event.MEDIA_SOURCE_IMPORTED,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val sourceUri: String? = null
 )

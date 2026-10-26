@@ -14,11 +14,12 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "markline.db"
-        const val DATABASE_VERSION = 6
+        const val DATABASE_VERSION = 8
 
         // 表名
         const val TABLE_EVENT = "event"
         const val TABLE_EVENT_PHOTO = "event_photo"
+        const val TABLE_SYNC_TOMBSTONE = "sync_tombstone"
 
         // 列名
         const val COL_ID = "id"
@@ -34,6 +35,8 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         const val COL_UUID = "uuid"
         const val COL_PHOTO_URI = "photo_uri"
         const val COL_MEDIA_SOURCE = "media_source"
+        const val COL_SOURCE_URI = "source_uri"
+        const val COL_UPDATED_AT = "updated_at"
 
         // event_photo 列名
         const val COL_EP_ID = "_id"
@@ -42,6 +45,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         const val COL_EP_MEDIA_SOURCE = "media_source"
         const val COL_EP_CREATED_AT = "created_at"
         const val COL_EP_SORT = "sort_order"
+        const val COL_EP_SOURCE_URI = "source_uri"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -60,7 +64,9 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 $COL_LABEL         TEXT,
                 $COL_STATUS        INTEGER DEFAULT 0,
                 $COL_PHOTO_URI     TEXT,
-                $COL_MEDIA_SOURCE  INTEGER DEFAULT 0
+                $COL_MEDIA_SOURCE  INTEGER DEFAULT 0,
+                $COL_SOURCE_URI    TEXT,
+                $COL_UPDATED_AT    INTEGER
             )
             """.trimIndent()
         )
@@ -71,6 +77,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         db.execSQL("CREATE UNIQUE INDEX idx_event_uuid ON $TABLE_EVENT($COL_UUID)")
 
         createEventPhotoTable(db)
+        createSyncTombstoneTable(db)
     }
 
     private fun createEventPhotoTable(db: SQLiteDatabase) {
@@ -82,11 +89,24 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 ${COL_EP_PHOTO_URI}     TEXT NOT NULL,
                 ${COL_EP_MEDIA_SOURCE}  INTEGER DEFAULT 0,
                 ${COL_EP_CREATED_AT}    INTEGER,
-                ${COL_EP_SORT}          INTEGER DEFAULT 0
+                ${COL_EP_SORT}          INTEGER DEFAULT 0,
+                ${COL_EP_SOURCE_URI}    TEXT
             )
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_ep_event_id ON $TABLE_EVENT_PHOTO($COL_EP_EVENT_ID)")
+    }
+
+    private fun createSyncTombstoneTable(db: SQLiteDatabase) {
+        // 已删除记录的墓碑：云同步时向其他设备传播删除操作，防止被远端复活
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_SYNC_TOMBSTONE (
+                $COL_UUID      TEXT PRIMARY KEY,
+                $COL_UPDATED_AT INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -133,6 +153,26 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         if (oldVersion < 6) {
             // v5 → v6: 新增 event_photo 多图表（事件详情可追加现场照片）
             createEventPhotoTable(db)
+        }
+        if (oldVersion < 7) {
+            // v6 → v7: source_uri 留档照片原始来源 Uri（去重用），
+            // 存量导入数据的 photo_uri 即原始 content Uri，回填一份
+            db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_SOURCE_URI TEXT")
+            db.execSQL("ALTER TABLE $TABLE_EVENT_PHOTO ADD COLUMN $COL_EP_SOURCE_URI TEXT")
+            db.execSQL(
+                "UPDATE $TABLE_EVENT SET $COL_SOURCE_URI = $COL_PHOTO_URI " +
+                "WHERE $COL_MEDIA_SOURCE = 1 AND $COL_PHOTO_URI LIKE 'content:%'"
+            )
+            db.execSQL(
+                "UPDATE $TABLE_EVENT_PHOTO SET $COL_EP_SOURCE_URI = $COL_EP_PHOTO_URI " +
+                "WHERE $COL_EP_MEDIA_SOURCE = 1 AND $COL_EP_PHOTO_URI LIKE 'content:%'"
+            )
+        }
+        if (oldVersion < 8) {
+            // v7 → v8: updated_at（云同步字段级冲突合并依据）+ 墓碑表
+            db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_UPDATED_AT INTEGER")
+            db.execSQL("UPDATE $TABLE_EVENT SET $COL_UPDATED_AT = $COL_CREATED_AT WHERE $COL_UPDATED_AT IS NULL")
+            createSyncTombstoneTable(db)
         }
     }
 

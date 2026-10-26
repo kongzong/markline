@@ -27,9 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.markline.domain.Event
 import app.markline.domain.EventStore
+import app.markline.system.SyncManager
+import app.markline.system.SyncWorker
 import app.markline.ui.theme.*
 import app.markline.util.BackupManager
 import app.markline.util.SettingsStore
+import app.markline.util.TimeUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,10 +52,21 @@ fun SettingsScreen(
     var audioDuration by remember { mutableStateOf(settingsStore.audioDurationSec) }
     var enableLocation by remember { mutableStateOf(settingsStore.locationEnabled) }
     var enableVibrate  by remember { mutableStateOf(settingsStore.vibrateEnabled) }
+    var backupPhotoLite by remember { mutableStateOf(settingsStore.backupPhotoLite) }
+
+    // 云同步状态
+    var syncEnabled by remember { mutableStateOf(settingsStore.syncEnabled) }
+    var webdavUrl     by remember { mutableStateOf(settingsStore.webdavUrl) }
+    var webdavUser    by remember { mutableStateOf(settingsStore.webdavUser) }
+    var webdavPass    by remember { mutableStateOf(settingsStore.webdavPass) }
+    var lastSyncAt    by remember { mutableStateOf(settingsStore.lastSyncAt) }
+    var isSyncing     by remember { mutableStateOf(false) }
+    var showWebdavDialog by remember { mutableStateOf(false) }
 
     var isBackupProcessing by remember { mutableStateOf(false) }
 
     var showDurationDialog by remember { mutableStateOf(false) }
+    var showQualityDialog  by remember { mutableStateOf(false) }
     var showHelpDialog     by remember { mutableStateOf(false) }
     var showAboutDialog    by remember { mutableStateOf(false) }
 
@@ -191,8 +205,80 @@ fun SettingsScreen(
                 color    = MaterialTheme.colorScheme.outlineVariant
             )
 
+            // ── 云同步（WebDAV）────────────────────────────
+            SectionHeader("云同步")
+
+            SwitchItem(
+                icon      = Icons.Outlined.CloudSync,
+                title     = "自动同步",
+                subtitle  = "接入坚果云 WebDAV，数据变化即同步 + 每 6 小时兜底",
+                checked   = syncEnabled,
+                onChecked = { enabled ->
+                    syncEnabled = enabled
+                    settingsStore.syncEnabled = enabled
+                    if (enabled) {
+                        if (webdavUser.isBlank() || webdavPass.isBlank()) {
+                            showWebdavDialog = true
+                        }
+                        SyncWorker.schedulePeriodic(context)
+                        SyncWorker.syncNow(context)
+                    } else {
+                        SyncWorker.cancel(context)
+                    }
+                }
+            )
+
+            ArrowItem(
+                icon    = Icons.Outlined.Dns,
+                title   = "服务器配置",
+                trailing = if (webdavUrl.isBlank()) "坚果云（默认）" else webdavUrl
+                    .removePrefix("https://").removePrefix("http://"),
+                onClick = { showWebdavDialog = true }
+            )
+
+            ArrowItem(
+                icon    = Icons.Outlined.Sync,
+                title   = if (isSyncing) "正在同步…" else "立即同步",
+                trailing = if (lastSyncAt > 0) TimeUtil.formatDate(lastSyncAt) + " " + TimeUtil.formatTime(lastSyncAt) else "从未同步",
+                onClick = {
+                    if (isSyncing) return@ArrowItem
+                    if (webdavUser.isBlank() || webdavPass.isBlank()) {
+                        Toast.makeText(context, "请先配置 WebDAV 账号与应用密码", Toast.LENGTH_SHORT).show()
+                        showWebdavDialog = true
+                        return@ArrowItem
+                    }
+                    isSyncing = true
+                    scope.launch(Dispatchers.IO) {
+                        val result = SyncManager.sync(context, settingsStore, eventStore)
+                        withContext(Dispatchers.Main) {
+                            isSyncing = false
+                            lastSyncAt = settingsStore.lastSyncAt
+                            val msg = if (result.ok) {
+                                "同步完成：上传 ${result.uploadedEvents} 条/${result.uploadedFiles} 文件，" +
+                                "下载 ${result.downloadedEvents} 条/${result.downloadedFiles} 文件"
+                            } else {
+                                "同步失败：${result.error}"
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                color    = MaterialTheme.colorScheme.outlineVariant
+            )
+
             // ── 数据管理 ──────────────────────────────────
             SectionHeader("数据管理")
+
+            ArrowItem(
+                icon    = Icons.Outlined.Photo,
+                title   = "备份画质",
+                trailing = if (backupPhotoLite) "轻量压缩" else "完整原图",
+                onClick = { showQualityDialog = true }
+            )
 
             // 处理中提示
             if (isBackupProcessing) {
@@ -221,7 +307,7 @@ fun SettingsScreen(
                         isBackupProcessing = true
                         scope.launch(Dispatchers.IO) {
                             try {
-                                val fileName = BackupManager.exportToFile(context, eventStore)
+                                val fileName = BackupManager.exportToFile(context, eventStore, backupPhotoLite)
                                 withContext(Dispatchers.Main) {
                                     if (fileName != null) {
                                         Toast.makeText(context, "已保存到 Downloads/$fileName", Toast.LENGTH_LONG).show()
@@ -245,8 +331,8 @@ fun SettingsScreen(
                     if (!isBackupProcessing) {
                         isBackupProcessing = true
                         scope.launch(Dispatchers.IO) {
-                            try {
-                                val intent = BackupManager.createShareIntent(context, eventStore)
+                    try {
+                        val intent = BackupManager.createShareIntent(context, eventStore, backupPhotoLite)
                                 withContext(Dispatchers.Main) {
                                     if (intent != null) {
                                         context.startActivity(Intent.createChooser(intent, "分享备份"))
@@ -339,6 +425,35 @@ fun SettingsScreen(
         )
     }
 
+    if (showQualityDialog) {
+        QualitySelectionDialog(
+            currentLite = backupPhotoLite,
+            onDismiss = { showQualityDialog = false },
+            onSelected = {
+                backupPhotoLite = it
+                settingsStore.backupPhotoLite = it
+                showQualityDialog = false
+            }
+        )
+    }
+
+    if (showWebdavDialog) {
+        WebDavConfigDialog(
+            initialUrl = webdavUrl,
+            initialUser = webdavUser,
+            initialPass = webdavPass,
+            onDismiss = { showWebdavDialog = false },
+            onSave = { url, user, pass ->
+                webdavUrl = url; webdavUser = user; webdavPass = pass
+                settingsStore.webdavUrl = url
+                settingsStore.webdavUser = user
+                settingsStore.webdavPass = pass
+                showWebdavDialog = false
+                Toast.makeText(context, "WebDAV 配置已保存", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     if (showHelpDialog) {
         HelpDialog(onDismiss = { showHelpDialog = false })
     }
@@ -376,6 +491,7 @@ private fun HelpDialog(onDismiss: () -> Unit) {
                 HelpSection("签到打卡",
                     "点击首页底部中央的圆形按钮即可签到。",
                     "签到时会自动记录当前位置和地址。",
+                    "「拍照签到」一键调起相机，自动读取照片时间与定位。",
                     "如果开启了录音功能，签到后将自动开始录音。"
                 )
                 HelpSection("录音",
@@ -388,21 +504,35 @@ private fun HelpDialog(onDismiss: () -> Unit) {
                     "开启后签到将自动获取 GPS 位置并解析为地址。",
                     "定位精度为高精度模式，确保门牌号等细节准确。"
                 )
+                HelpSection("照片导入",
+                    "时间线顶栏的「导入」图标可从相册批量导入照片。",
+                    "按照片 EXIF 信息自动生成带时间、地点的记录。",
+                    "导入的照片会复制到应用私有目录，删原图不影响查看。",
+                    "按来源照片自动去重，重复导入不会生成重复记录。"
+                )
                 HelpSection("时间线",
-                    "首页向上滑动进入时间线视图。",
-                    "时间线按日期分组展示所有签到记录。",
-                    "点击任意记录可查看详情，包括位置、录音、备注等。"
+                    "时间线按日期分组、单列排布，大屏小屏体验一致。",
+                    "数据变化（增删改、云同步下载）时自动刷新，无需手动重进。",
+                    "下拉可手动刷新；双击顶栏「Line」区域快速回到顶部。",
+                    "点击任意记录可查看详情，包括照片、位置、录音、备注等。"
                 )
                 HelpSection("数据备份",
                     "「导出到文件」：将数据打包为 ZIP 文件保存到 Downloads。",
-                    "「分享备份」：通过微信、邮件等方式分享备份文件。",
+                    "备份包含全部照片与录音文件，换机一键完整迁移。",
+                    "「备份画质」可选完整原图或轻量压缩，控制备份包体积。",
                     "「导入数据」：选择备份文件恢复数据，支持 ZIP 和旧版 JSON 格式。",
                     "导入时按 UUID 去重，已存在的记录会自动跳过。"
+                )
+                HelpSection("云同步",
+                    "在「数据管理」上方的「云同步」中配置 WebDAV 服务器。",
+                    "支持坚果云等服务商，配置后自动双向同步。",
+                    "本地有修改会自动触发同步；进入时间线时也会检查更新。",
+                    "记录、照片、录音、删除操作均会同步，多设备数据保持一致。"
                 )
                 HelpSection("注意事项",
                     "首次使用需授予位置和录音权限。",
                     "建议定期导出备份，避免数据丢失。",
-                    "更换手机时，使用分享备份功能可快速迁移数据。"
+                    "更换手机时，云同步或分享备份均可快速迁移数据。"
                 )
             }
         },
@@ -529,6 +659,104 @@ private fun generateMockData(eventStore: EventStore) {
             eventStore.insert(event)
         }
     }
+}
+
+@Composable
+private fun QualitySelectionDialog(
+    currentLite: Boolean,
+    onDismiss: () -> Unit,
+    onSelected: (Boolean) -> Unit
+) {
+    val options = listOf(
+        false to "完整原图（推荐，凭证保真）",
+        true to "轻量压缩（长边 1600px，包体小 10 倍+）"
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择备份画质") },
+        text = {
+            Column {
+                options.forEach { (lite, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelected(lite) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = lite == currentLite,
+                            onClick = { onSelected(lite) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = label)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+private fun WebDavConfigDialog(
+    initialUrl: String,
+    initialUser: String,
+    initialPass: String,
+    onDismiss: () -> Unit,
+    onSave: (url: String, user: String, pass: String) -> Unit
+) {
+    var url by remember { mutableStateOf(initialUrl.ifBlank { "https://dav.jianguoyun.com/dav/" }) }
+    var user by remember { mutableStateOf(initialUser) }
+    var pass by remember { mutableStateOf(initialPass) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("WebDAV 服务器") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("服务器地址") },
+                    placeholder = { Text("https://dav.jianguoyun.com/dav/") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = user,
+                    onValueChange = { user = it },
+                    label = { Text("账号") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = pass,
+                    onValueChange = { pass = it },
+                    label = { Text("应用密码") },
+                    placeholder = { Text("坚果云：账户信息 → 安全选项 → 添加应用密码") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "记录与照片将同步到该网盘的 MarkLine/ 目录，密码仅保存在本机",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(url.trim(), user.trim(), pass) },
+                enabled = url.isNotBlank() && user.isNotBlank() && pass.isNotBlank()
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable

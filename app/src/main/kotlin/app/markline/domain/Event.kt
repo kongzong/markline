@@ -42,10 +42,16 @@ data class Event(
     /** 事件状态 */
     val status: Int = STATUS_CREATED,
 
-    /** 关联照片 Uri（相册导入来源），无则为 null */
+    /** 关联照片 Uri（本地私有目录绝对路径；旧数据可能为 content Uri），无则为 null */
     val photoUri: String? = null,
 
-    /** 媒体来源：0=Mark 打卡，1=相册导入 */
+    /** 照片原始来源 Uri（相册导入去重用；跨设备迁移后仍可识别同一张照片），非导入图则为 null */
+    val sourceUri: String? = null,
+
+    /** 最后修改时间（云同步冲突合并依据；新记录 = createdAt，编辑后刷新） */
+    val updatedAt: Long = 0,
+
+    /** 媒体来源：0=Mark 打卡，1=相册导入，2=拍照签到 */
     val mediaSource: Int = MEDIA_SOURCE_MARK
 ) {
     companion object {

@@ -74,6 +74,12 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // WorkManager（云同步周期任务，随 AndroidX 自带、无 GMS 依赖）
+    implementation(libs.androidx.work.runtime)
+
+    // OkHttp（WebDAV 需要自定义 HTTP 方法 MKCOL，HttpURLConnection 不支持）
+    implementation(libs.okhttp)
+
     // Gson (JSON)
     implementation(libs.gson)
 

@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.core.content.ContextCompat
 import app.markline.system.AudioRecordService
 import app.markline.system.LocationService
+import app.markline.system.SyncWorker
 import app.markline.util.CheckinNotifier
 import app.markline.util.ExifImporter
 import app.markline.util.SettingsStore
@@ -201,6 +202,7 @@ class CheckinService(
             }
         }
 
+        SyncWorker.onDataChanged(context)
         return eventId
     }
 
@@ -219,19 +221,20 @@ class CheckinService(
         // 1. 解析照片 EXIF（时间 + 经纬度）
         val meta = ExifImporter.parsePhotoMeta(context, photoUri)
 
-        // 2. 写 Event（封面=该图）
+        // 2. 写 Event（封面=该图；photoUri 记录私有目录本地路径，与备份/删除逻辑统一）
+        val storedPath = storedFile.absolutePath
         val eventId = eventStore.insert(
             Event(
                 uuid       = java.util.UUID.randomUUID().toString(),
                 createdAt  = now,
                 status     = Event.STATUS_CREATED,
                 mediaSource = Event.MEDIA_SOURCE_PHOTO,
-                photoUri   = photoUri.toString()
+                photoUri   = storedPath
             )
         )
         eventStore.insertEventPhoto(
             eventId     = eventId,
-            photoUri    = photoUri.toString(),
+            photoUri    = storedPath,
             mediaSource = Event.MEDIA_SOURCE_PHOTO,
             createdAt   = now
         )
@@ -276,6 +279,7 @@ class CheckinService(
             CheckinNotifier.notify(context, eventId, timeLabel, address, false, finalStatus)
         } catch (_: Exception) { /* 通知失败不影响签到完成 */ }
 
+        SyncWorker.onDataChanged(context)
         return eventId
     }
 }

@@ -3,6 +3,8 @@
 
     <!-- 普通权限，无需运行时申请 -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 云同步（WebDAV）：联网访问坚果云等 DAV 服务；安装时自动授予，无需运行时申请 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- 前台服务权限（Android 14+ 需要指定类型） -->

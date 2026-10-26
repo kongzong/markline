@@ -36,9 +36,11 @@ import app.markline.MarkLineApp
 import app.markline.domain.Event
 import app.markline.domain.EventStore
 import app.markline.system.AudioRecordService
+import app.markline.system.SyncWorker
 import app.markline.ui.theme.*
 import app.markline.util.AudioFileUtil
 import app.markline.util.ExifImporter
+import app.markline.util.PhotoStore
 import app.markline.util.TimeUtil
 import app.markline.util.Wgs84ToGcj02
 import kotlinx.coroutines.CancellationException
@@ -112,13 +114,15 @@ fun EventDetailScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             try {
-                // 持久化读权限（document URI 支持，其他类型忽略）
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) { /* 非 document URI，忽略 */ }
                 val meta = ExifImporter.parsePhotoMeta(context, uri)
+                // 照片本体复制进私有目录，脱离外部相册存亡的依赖
+                val localPath = PhotoStore.importToPrivate(context, uri)
+                if (localPath == null) {
+                    android.widget.Toast.makeText(
+                        context, "照片读取失败，可能已被删除", android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
                 // 定位优先级：事件已有定位则保留；否则取照片 EXIF 定位
                 val cur = eventStore.findById(eventId)
                 if (cur != null && cur.latitude == null && cur.longitude == null
@@ -135,9 +139,11 @@ fun EventDetailScreen(
                     )
                 }
                 eventStore.insertEventPhoto(
-                    eventId, uri.toString(), Event.MEDIA_SOURCE_IMPORTED, System.currentTimeMillis()
+                    eventId, localPath, Event.MEDIA_SOURCE_IMPORTED, System.currentTimeMillis(),
+                    uri.toString()
                 )
                 refreshTick++
+                SyncWorker.onDataChanged(context)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -272,6 +278,7 @@ fun EventDetailScreen(
                                                         eventStore.updateLabel(ev.id, lbl)
                                                         refreshTick++
                                                         isEditingLabel = false
+                                                        SyncWorker.onDataChanged(context)
                                                     }
                                                 },
                                                 label = { Text(lbl, fontSize = 13.sp) },
@@ -304,6 +311,7 @@ fun EventDetailScreen(
                                             eventStore.updateLabel(ev.id, labelText.trim())
                                             refreshTick++
                                             isEditingLabel = false
+                                            SyncWorker.onDataChanged(context)
                                         }
                                     }
                                 }) {
@@ -467,6 +475,7 @@ fun EventDetailScreen(
                                     onClick = {
                                         eventStore.deleteEventPhoto(p.id)
                                         refreshTick++
+                                        SyncWorker.onDataChanged(context)
                                     },
                                     modifier = Modifier
                                         .size(24.dp)
@@ -610,6 +619,7 @@ fun EventDetailScreen(
                                     eventStore.updateNote(ev.id, noteText)
                                     isEditingNote = false
                                     refreshTick++
+                                    SyncWorker.onDataChanged(context)
                                 }
                             }) {
                                 Icon(Icons.Outlined.Check, contentDescription = "完成", tint = Green500)
@@ -659,6 +669,7 @@ fun EventDetailScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         eventStore.deleteById(eventId)
+                        SyncWorker.onDataChanged(context)
                         onBack()
                     }) { Text("删除", color = Red400) }
                 },

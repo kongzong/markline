@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
 import app.markline.domain.Event
 import app.markline.domain.EventStore
+import app.markline.util.PhotoStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,7 +55,7 @@ object ExifImporter {
             PhotoMeta(System.currentTimeMillis(), null, null)
         }
 
-    /** 批量导入：自动去重（按照片 Uri），持久化读权限保证重启后仍可访问原图 */
+    /** 批量导入：自动去重（按原始来源 Uri），照片本体复制进私有目录后本地路径落库 */
     suspend fun importPhotos(
         context: Context,
         eventStore: EventStore,
@@ -69,19 +70,22 @@ object ExifImporter {
         for (uri in uris) {
             try {
                 val uriStr = uri.toString()
-                // 去重：同一张照片不重复导入
-                if (eventStore.findByPhotoUri(uriStr) != null) {
+                // 去重：同一张照片（原始来源 Uri）不重复导入
+                if (eventStore.findBySourceUri(uriStr) != null ||
+                    eventStore.findByPhotoUri(uriStr) != null
+                ) {
                     skipped++
                     continue
                 }
-                // 持久化读权限（document URI 支持，其他类型忽略）
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) { /* 非 document URI 或已不支持持久化，忽略 */ }
 
                 val meta = parsePhotoMeta(context, uri)
+                // 照片本体复制进私有目录，脱离外部相册存亡的依赖
+                val localPath = PhotoStore.importToPrivate(context, uri)
+                if (localPath == null) {
+                    failed++
+                    continue
+                }
+
                 val event = Event(
                     uuid = UUID.randomUUID().toString(),
                     createdAt = meta.time,
@@ -90,7 +94,8 @@ object ExifImporter {
                     label = label,
                     status = if (meta.latitude != null && meta.longitude != null)
                         Event.STATUS_DONE else Event.STATUS_LOCATION_FAILED,
-                    photoUri = uriStr,
+                    photoUri = localPath,
+                    sourceUri = uriStr,
                     mediaSource = Event.MEDIA_SOURCE_IMPORTED
                 )
                 eventStore.insert(event).also { eid ->
@@ -98,9 +103,10 @@ object ExifImporter {
                     // 同步写入多图表（保持一图一事件，封面=该图）
                     eventStore.insertEventPhoto(
                         eventId = eid,
-                        photoUri = uriStr,
+                        photoUri = localPath,
                         mediaSource = Event.MEDIA_SOURCE_IMPORTED,
-                        createdAt = meta.time
+                        createdAt = meta.time,
+                        sourceUri = uriStr
                     )
                 }
                 imported++
@@ -108,6 +114,9 @@ object ExifImporter {
                 e.printStackTrace()
                 failed++
             }
+        }
+        if (imported > 0) {
+            app.markline.system.SyncWorker.onDataChanged(context)
         }
         ImportResult(imported, skipped, failed, ids)
     }

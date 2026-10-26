@@ -33,28 +33,65 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 从 content Uri 加载照片位图（共享加载逻辑）。
- * 优先用系统缩略图（loadThumbnail，速度快、内存友好）；
- * 部分内容提供方不支持时回退到直接解码原流（采样降级，避免大图 OOM）。
+ * 加载照片位图（共享加载逻辑）。
+ * - content Uri：优先系统缩略图（loadThumbnail，速度快、内存友好），
+ *   部分内容提供方不支持时回退到直接解码原流（采样降级，避免大图 OOM）。
+ * - 本地路径 / file Uri（photoUri 本地化后的新数据）：直接解码文件。
  */
 suspend fun loadBitmap(context: Context, uri: Uri, targetPx: Int): Bitmap? {
     return withContext(Dispatchers.IO) {
         var bmp: Bitmap? = null
-        // 首选：系统缩略图
-        try {
-            bmp = context.contentResolver.loadThumbnail(uri, Size(targetPx, targetPx), null)
-        } catch (_: Exception) {
-            bmp = null
-        }
-        // 回退：直接解码原始流（采样降级）
-        if (bmp == null) {
+        val uriStr = uri.toString()
+        if (uri.scheme == "content") {
+            // 首选：系统缩略图
             try {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val opts = BitmapFactory.Options().apply { inSampleSize = if (targetPx >= 1000) 2 else 4 }
-                    bmp = BitmapFactory.decodeStream(stream, null, opts)
-                }
+                bmp = context.contentResolver.loadThumbnail(uri, Size(targetPx, targetPx), null)
             } catch (_: Exception) {
                 bmp = null
+            }
+            // 回退：直接解码原始流（采样降级）
+            if (bmp == null) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        val opts = BitmapFactory.Options().apply { inSampleSize = if (targetPx >= 1000) 2 else 4 }
+                        bmp = BitmapFactory.decodeStream(stream, null, opts)
+                    }
+                } catch (_: Exception) {
+                    bmp = null
+                }
+            }
+        } else {
+            // 本地文件（绝对路径或 file:// Uri）
+            val file = if (uriStr.startsWith("/")) java.io.File(uriStr)
+                       else uri.path?.let { java.io.File(it) }
+            if (file != null && file.exists()) {
+                try {
+                    val opts = BitmapFactory.Options().apply { inSampleSize = if (targetPx >= 1000) 2 else 4 }
+                    bmp = BitmapFactory.decodeFile(file.absolutePath, opts)
+                    // EXIF 方向纠正：折叠屏/部分相机的照片带 orientation 标记，
+                    // BitmapFactory 不处理，需按标记旋转后显示（原图字节不动）
+                    val degrees = try {
+                        when (androidx.exifinterface.media.ExifInterface(file.absolutePath)
+                            .getAttributeInt(
+                                androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                                androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+                            )) {
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                            else -> 0f
+                        }
+                    } catch (_: Exception) { 0f }
+                    if (degrees != 0f) {
+                        val decoded = bmp
+                        if (decoded != null) {
+                            val m = android.graphics.Matrix().apply { postRotate(degrees) }
+                            bmp = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
+                        }
+                    }
+                } catch (_: Exception) {
+                    bmp = null
+                }
             }
         }
         bmp

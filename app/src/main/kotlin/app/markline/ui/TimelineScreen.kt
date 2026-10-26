@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -12,12 +13,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -25,10 +28,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.markline.domain.Event
+import app.markline.system.SyncWorker
 import app.markline.domain.EventStore
+import app.markline.storage.SQLiteEventStore
 import app.markline.ui.theme.Green500
 import app.markline.util.TimeUtil
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private sealed interface TimelineRow {
     val key: Any
@@ -66,10 +72,27 @@ fun TimelineScreen(
     var selectedLabel by remember { mutableStateOf<String?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
-    val labelCounts by produceState<List<Pair<String, Int>>>(emptyList()) {
+
+    // 进入 Line 时补偿同步：距上次同步超过 5 分钟且云同步已启用才触发，不密集打网络
+    val syncContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        val app = syncContext.applicationContext as? app.markline.MarkLineApp ?: return@LaunchedEffect
+        val settings = app.settingsStore
+        if (settings.syncEnabled &&
+            System.currentTimeMillis() - settings.lastSyncAt > 5 * 60_000L
+        ) {
+            SyncWorker.syncNow(syncContext)
+        }
+    }
+
+    // ── 响应式刷新：存储层任何增删改（含后台同步下载新记录）都会 bump 全局数据版本，
+    //    Line 界面据此自动重载，无需手动返回重进 ──
+    val dataVersion by SQLiteEventStore.dataVersion.collectAsState()
+
+    val labelCounts by produceState<List<Pair<String, Int>>>(emptyList(), dataVersion) {
         value = eventStore.queryLabelCounts()
     }
-    val totalCount by produceState(0) {
+    val totalCount by produceState(0, dataVersion) {
         value = eventStore.countAll()
     }
 
@@ -83,14 +106,34 @@ fun TimelineScreen(
     var hasMore by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
     val pageSize = 30
+    // 已应用的数据版本号：dataVersion 未变时不重复重载（也避免与下拉刷新双重加载）
+    var appliedVersion by remember { mutableStateOf(-1L) }
 
-    // ── 主题过滤 / 搜索：一次性取匹配集（结果集通常较小，不强加分页）──
-    val filteredEvents by produceState<List<Event>>(emptyList(), selectedLabel, searchQuery) {
+    val gridState = rememberLazyStaggeredGridState()
+    // 待恢复的滚动位置（首个可见项 key + 偏移）：响应式重载后跳回原位，不回顶
+    var pendingScroll by remember { mutableStateOf<Pair<Any, Int>?>(null) }
+
+    fun reloadFirstPage() {
+        // 保留已加载页数（深滚动时不截断回 30 条），并记录首个可见项用于恢复滚动位置
+        val keep = maxOf(offset, pageSize)
+        val first = gridState.layoutInfo.visibleItemsInfo.firstOrNull()
+        pendingScroll = if (first != null && first.index > 0) first.key to -first.offset.y else null
+        isLoading = true
+        val page = eventStore.queryRecentPage(keep, 0)
+        events = page
+        offset = page.size
+        hasMore = page.size == keep
+        isLoading = false
+        appliedVersion = dataVersion
+    }
+
+    // ── 主题过滤 / 搜索：一次性取匹配集（结果集通常较小，不强加分页）；数据版本变化时自动重查 ──
+    val filteredEvents by produceState<List<Event>>(emptyList(), selectedLabel, searchQuery, dataVersion) {
         val label = selectedLabel ?: return@produceState
         if (isSearching) return@produceState
         value = eventStore.queryByLabel(label)
     }
-    val searchResults by produceState<List<Event>>(emptyList(), searchQuery, selectedLabel) {
+    val searchResults by produceState<List<Event>>(emptyList(), searchQuery, selectedLabel, dataVersion) {
         if (searchQuery.isBlank()) {
             value = emptyList()
         } else {
@@ -100,15 +143,10 @@ fun TimelineScreen(
         }
     }
 
-    // 进入默认模式（或过滤/搜索切换回默认）时重置并加载首屏
-    LaunchedEffect(isFiltering, isSearching) {
-        if (!isFiltering && !isSearching) {
-            isLoading = true
-            val page = eventStore.queryRecentPage(pageSize, 0)
-            events = page
-            offset = page.size
-            hasMore = page.size == pageSize
-            isLoading = false
+    // 进入默认模式或数据版本变化（首次进入/后台同步下载/其他页面增删改）时重载首屏
+    LaunchedEffect(dataVersion, isFiltering, isSearching) {
+        if (!isFiltering && !isSearching && dataVersion != appliedVersion) {
+            reloadFirstPage()
         }
     }
 
@@ -122,7 +160,10 @@ fun TimelineScreen(
         isLoading = false
     }
 
-    val gridState = rememberLazyStaggeredGridState()
+    // ── 下拉刷新：重载本地首屏；云同步开启时顺带触发一次后台同步，
+    //    同步下载完成后 dataVersion bump 会再次自动刷新 ──
+    val scope = rememberCoroutineScope()
+    var isRefreshing by remember { mutableStateOf(false) }
     val shouldLoadMore by remember {
         derivedStateOf {
             val info = gridState.layoutInfo
@@ -143,13 +184,36 @@ fun TimelineScreen(
     val today = TimeUtil.formatDate(System.currentTimeMillis())
     val rows = remember(displayList, today) { buildRows(displayList, today) }
 
+    // 响应式重载后恢复滚动位置：按 key 找回原可见项并瞬时跳转（找不到则保持自然位置，如被删项）
+    LaunchedEffect(rows, pendingScroll) {
+        val target = pendingScroll ?: return@LaunchedEffect
+        pendingScroll = null
+        val idx = rows.indexOfFirst { it.key == target.first }
+        if (idx >= 0) gridState.scrollToItem(idx, target.second)
+    }
+
     var showFullPhoto by remember { mutableStateOf<Uri?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        // fillMaxWidth：双击区铺满标题槽位（到右侧图标前），否则只有「Line」字符可点
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                            // 双击顶栏标题：平滑滚回列表顶部（Material 常规交互）
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (displayList.isNotEmpty()) {
+                                        scope.launch { gridState.animateScrollToItem(0) }
+                                    }
+                                }
+                            )
+                        }
+                    ) {
                         Text(
                             "Line",
                             fontWeight = FontWeight.Bold,
@@ -241,23 +305,42 @@ fun TimelineScreen(
                 )
             )
 
-            if (displayList.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (defaultMode && isLoading) {
-                        CircularProgressIndicator()
-                    } else {
-                        val emptyText = when {
-                            isSearching && isFiltering -> "主题「${selectedLabel}」下未找到匹配「${searchQuery}」的记录"
-                            isSearching -> "未找到匹配「${searchQuery}」的记录"
-                            isFiltering -> "主题「${selectedLabel}」下暂无记录"
-                            else -> "暂无签到记录，去首页点击 Mark 开始第一条"
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    scope.launch {
+                        val app = syncContext.applicationContext as? app.markline.MarkLineApp
+                        if (app?.settingsStore?.syncEnabled == true) {
+                            SyncWorker.syncNow(syncContext)
                         }
-                        Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        reloadFirstPage()
+                        isRefreshing = false
                     }
                 }
-            } else {
-                LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Adaptive(minSize = 150.dp),
+            ) {
+                if (displayList.isEmpty()) {
+                    Box(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (defaultMode && isLoading) {
+                            CircularProgressIndicator()
+                        } else {
+                            val emptyText = when {
+                                isSearching && isFiltering -> "主题「${selectedLabel}」下未找到匹配「${searchQuery}」的记录"
+                                isSearching -> "未找到匹配「${searchQuery}」的记录"
+                                isFiltering -> "主题「${selectedLabel}」下暂无记录"
+                                else -> "暂无签到记录，去首页点击 Mark 开始第一条"
+                            }
+                            Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    LazyVerticalStaggeredGrid(
+                    // 时间线统一单列垂直排布（折叠屏/手机一致）：
+                    // 全宽大卡 + 横幅照片，记录少不显空、多不显乱；分页与日期分隔保留
+                    columns = StaggeredGridCells.Fixed(1),
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -297,6 +380,7 @@ fun TimelineScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
+                    }
                     }
                 }
             }
