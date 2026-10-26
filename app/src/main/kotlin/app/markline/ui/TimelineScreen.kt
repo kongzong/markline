@@ -1,6 +1,8 @@
 package app.markline.ui
 
+import android.graphics.Bitmap
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,9 +34,12 @@ import app.markline.system.SyncWorker
 import app.markline.domain.EventStore
 import app.markline.storage.SQLiteEventStore
 import app.markline.ui.theme.Green500
+import app.markline.util.SharePosterGenerator
 import app.markline.util.TimeUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private sealed interface TimelineRow {
     val key: Any
@@ -164,6 +169,36 @@ fun TimelineScreen(
     //    同步下载完成后 dataVersion bump 会再次自动刷新 ──
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
+
+    // ── 主题分享长图：筛选激活后顶栏出现分享入口，数据 = 当前筛选结果 ──
+    var posterBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var showPosterDialog by remember { mutableStateOf(false) }
+    var generatingPoster by remember { mutableStateOf(false) }
+
+    fun generatePoster() {
+        val label = selectedLabel ?: return
+        if (generatingPoster) return
+        val events = filteredEvents
+        if (events.isEmpty()) return
+        generatingPoster = true
+        scope.launch(Dispatchers.Default) {
+            try {
+                val sources = events.sortedByDescending { it.createdAt }
+                    .map { ev -> SharePosterGenerator.Source(ev, eventStore.getEventPhotos(ev.id).map { p -> p.photoUri }) }
+                val bmp = SharePosterGenerator.generate(syncContext, label, sources)
+                withContext(Dispatchers.Main) {
+                    posterBitmap = bmp
+                    showPosterDialog = true
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(syncContext, "生成失败：${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                withContext(Dispatchers.Main) { generatingPoster = false }
+            }
+        }
+    }
     val shouldLoadMore by remember {
         derivedStateOf {
             val info = gridState.layoutInfo
@@ -254,6 +289,16 @@ fun TimelineScreen(
                     }
                 },
                 actions = {
+                    if (selectedLabel != null) {
+                        IconButton(onClick = { generatePoster() }, enabled = !generatingPoster) {
+                            if (generatingPoster) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Outlined.Share, contentDescription = "生成分享长图",
+                                    tint = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
                     IconButton(onClick = { showFilterSheet = true }) {
                         Icon(
                             Icons.Outlined.FilterList,
@@ -388,6 +433,55 @@ fun TimelineScreen(
 
         if (showFullPhoto != null) {
             FullPhotoDialog(uri = showFullPhoto) { showFullPhoto = null }
+        }
+
+        // ── 分享长图：预览 + 分享/保存到相册 ──
+        if (showPosterDialog) {
+            val bmp = posterBitmap
+            if (bmp != null) {
+                AlertDialog(
+                    onDismissRequest = { showPosterDialog = false; posterBitmap = null },
+                    title = { Text("分享长图已生成") },
+                    text = {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(360.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "长图预览",
+                                modifier = Modifier.fillMaxWidth(),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            SharePosterGenerator.shareAsImage(syncContext, bmp)
+                            showPosterDialog = false
+                            posterBitmap = null
+                        }) { Text("分享") }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(onClick = {
+                                val ok = SharePosterGenerator.saveToAlbum(syncContext, bmp)
+                                Toast.makeText(
+                                    syncContext,
+                                    if (ok) "已保存到相册 Pictures/MarkLine" else "保存失败",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }) { Text("保存到相册") }
+                            TextButton(onClick = { showPosterDialog = false; posterBitmap = null }) {
+                                Text("关闭")
+                            }
+                        }
+                    }
+                )
+            }
         }
 
         // ── 主题筛选弹层（漏斗入口）──
