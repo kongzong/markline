@@ -64,9 +64,11 @@ fun ImportPreviewScreen(
                         IconButton(onClick = {
                             importing = true
                             scope.launch {
+                                val app = context.applicationContext as app.markline.MarkLineApp
                                 val r = ExifImporter.importPhotos(
                                     context, eventStore, selectedUris,
-                                    label.ifBlank { null }
+                                    label.ifBlank { null },
+                                    app.locationService
                                 )
                                 importing = false
                                 result = r

@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
 import app.markline.domain.Event
 import app.markline.domain.EventStore
+import app.markline.system.LocationService
 import app.markline.util.PhotoStore
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,17 +56,21 @@ object ExifImporter {
             PhotoMeta(System.currentTimeMillis(), null, null)
         }
 
-    /** 批量导入：自动去重（按原始来源 Uri），照片本体复制进私有目录后本地路径落库 */
+    /** 批量导入：自动去重（按原始来源 Uri），照片本体复制进私有目录后本地路径落库。
+     *  locationService 非空时对带 EXIF 经纬度的记录同步逆地理编码补地址（同批次就近坐标复用结果）。 */
     suspend fun importPhotos(
         context: Context,
         eventStore: EventStore,
         uris: List<Uri>,
-        label: String? = null
+        label: String? = null,
+        locationService: LocationService? = null
     ): ImportResult = withContext(Dispatchers.IO) {
         var imported = 0
         var skipped = 0
         var failed = 0
         val ids = mutableListOf<Long>()
+        // 同批次地址记忆：同一场地的照片坐标几乎相同，避免逐张请求逆地理（限流+慢）
+        val addressMemo = mutableMapOf<String, String?>()
 
         for (uri in uris) {
             try {
@@ -108,6 +113,19 @@ object ExifImporter {
                         createdAt = meta.time,
                         sourceUri = uriStr
                     )
+                    // 补地址：导入时即逆地理编码落库（与拍照签到行为一致），
+                    // 否则要再次进详情页才会补上
+                    if (locationService != null && meta.latitude != null && meta.longitude != null) {
+                        val memoKey = "%.4f,%.4f".format(meta.latitude, meta.longitude)
+                        val address = addressMemo.getOrPut(memoKey) {
+                            try {
+                                locationService.reverseGeocode(meta.latitude, meta.longitude)
+                            } catch (_: Exception) { null }
+                        }
+                        if (address != null) {
+                            eventStore.updateEnhancement(id = eid, address = address)
+                        }
+                    }
                 }
                 imported++
             } catch (e: Exception) {
