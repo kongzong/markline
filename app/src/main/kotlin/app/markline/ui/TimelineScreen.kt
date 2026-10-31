@@ -3,6 +3,7 @@ package app.markline.ui
 import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,27 +45,14 @@ import kotlinx.coroutines.withContext
 
 private sealed interface TimelineRow {
     val key: Any
-    data class Header(val dateLabel: String, val isToday: Boolean) : TimelineRow {
-        override val key get() = "header_$dateLabel"
-    }
     data class Card(val event: Event) : TimelineRow {
         override val key get() = "event_${event.id}"
     }
 }
 
-private fun buildRows(events: List<Event>, today: String): List<TimelineRow> {
-    val rows = mutableListOf<TimelineRow>()
-    var lastDate: String? = null
-    for (e in events) {
-        val d = TimeUtil.formatDate(e.createdAt)
-        if (d != lastDate) {
-            rows.add(TimelineRow.Header(d, d == today))
-            lastDate = d
-        }
-        rows.add(TimelineRow.Card(e))
-    }
-    return rows
-}
+// 2026-10-31 去掉日期分组标题：卡片本身含完整时间，列表更紧凑（用户要求）
+private fun buildRows(events: List<Event>): List<TimelineRow> =
+    events.map { TimelineRow.Card(it) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,8 +62,8 @@ fun TimelineScreen(
     onNavigateToSettings: () -> Unit = {},
     onImport: () -> Unit = {}
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedLabel by remember { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
@@ -106,13 +95,19 @@ fun TimelineScreen(
     val defaultMode = !isFiltering && !isSearching
 
     // ── 默认模式：分页懒加载（每页 30 条）──
+    // events 与版本标记用普通 remember：切走/重建后丢失 → 必然触发重载，不会出现空列表假象
     var events by remember { mutableStateOf<List<Event>>(emptyList()) }
-    var offset by remember { mutableStateOf(0) }
-    var hasMore by remember { mutableStateOf(true) }
+    // 可保存状态：筛选词/加载深度在折叠展开、页面切换后不丢
+    var offset by rememberSaveable { mutableStateOf(0) }
+    var hasMore by rememberSaveable { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
     val pageSize = 30
-    // 已应用的数据版本号：dataVersion 未变时不重复重载（也避免与下拉刷新双重加载）
+    // 已应用的数据版本号：dataVersion 未变时不重复重载（也避免与下拉刷新双重加载）。
+    // ⚠️ 必须与 events 同为普通 remember：切走 Line（Navigation saveState）或重建后 events 必然丢失，
+    //    appliedVersion 若被恢复保存值，会与「restoreState 恢复的旧值」相等而跳过重载 → 空列表假象。
     var appliedVersion by remember { mutableStateOf(-1L) }
+    // 首次组合标记：与本页数据态同生命周期，重建/切回后必须至少重载一次（按保存的 offset 恢复已加载深度）
+    var initialized by remember { mutableStateOf(false) }
 
     val gridState = rememberLazyStaggeredGridState()
     // 待恢复的滚动位置（首个可见项 key + 偏移）：响应式重载后跳回原位，不回顶
@@ -148,10 +143,11 @@ fun TimelineScreen(
         }
     }
 
-    // 进入默认模式或数据版本变化（首次进入/后台同步下载/其他页面增删改）时重载首屏
+    // 进入默认模式或数据版本变化（首次进入/折叠屏重建/后台同步下载/其他页面增删改）时重载首屏
     LaunchedEffect(dataVersion, isFiltering, isSearching) {
-        if (!isFiltering && !isSearching && dataVersion != appliedVersion) {
+        if (!isFiltering && !isSearching && (!initialized || dataVersion != appliedVersion)) {
             reloadFirstPage()
+            initialized = true
         }
     }
 
@@ -216,8 +212,7 @@ fun TimelineScreen(
         isFiltering -> filteredEvents
         else -> events
     }
-    val today = TimeUtil.formatDate(System.currentTimeMillis())
-    val rows = remember(displayList, today) { buildRows(displayList, today) }
+    val rows = remember(displayList) { buildRows(displayList) }
 
     // 响应式重载后恢复滚动位置：按 key 找回原可见项并瞬时跳转（找不到则保持自然位置，如被删项）
     LaunchedEffect(rows, pendingScroll) {
@@ -355,12 +350,19 @@ fun TimelineScreen(
                 onRefresh = {
                     isRefreshing = true
                     scope.launch {
-                        val app = syncContext.applicationContext as? app.markline.MarkLineApp
-                        if (app?.settingsStore?.syncEnabled == true) {
-                            SyncWorker.syncNow(syncContext)
+                        try {
+                            // 最小展示 300ms：reloadFirstPage 是同步快查，若同帧内
+                            // true→false，指示器进出场状态机被跳过会卡住不消失
+                            delay(300)
+                            val app = syncContext.applicationContext as? app.markline.MarkLineApp
+                            if (app?.settingsStore?.syncEnabled == true) {
+                                SyncWorker.syncNow(syncContext)
+                            }
+                            reloadFirstPage()
+                        } finally {
+                            // 兜底：同步/查询抛异常时也必须收回指示器
+                            isRefreshing = false
                         }
-                        reloadFirstPage()
-                        isRefreshing = false
                     }
                 }
             ) {
@@ -383,8 +385,8 @@ fun TimelineScreen(
                     }
                 } else {
                     LazyVerticalStaggeredGrid(
-                    // 时间线统一单列垂直排布（折叠屏/手机一致）：
-                    // 全宽大卡 + 横幅照片，记录少不显空、多不显乱；分页与日期分隔保留
+                    // 全屏宽统一单列（宽屏双列实测杂乱，2026-10-31 回归单列，
+                    // 改用卡片内「左图右文」横排提升宽屏信息密度）
                     columns = StaggeredGridCells.Fixed(1),
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
@@ -394,14 +396,9 @@ fun TimelineScreen(
                 ) {
                     items(
                         items = rows,
-                        key = { it.key },
-                        span = {
-                            if (it is TimelineRow.Header) StaggeredGridItemSpan.FullLine
-                            else StaggeredGridItemSpan.SingleLane
-                        }
+                        key = { it.key }
                     ) { row ->
                         when (row) {
-                            is TimelineRow.Header -> DateHeader(row)
                             is TimelineRow.Card -> TimelineCard(
                                 event = row.event,
                                 onClick = { onEventClick(row.event.id) },
@@ -567,103 +564,171 @@ private fun FilterSheetRow(
 }
 
 @Composable
-private fun DateHeader(row: TimelineRow.Header) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = row.dateLabel,
-            color = if (row.isToday) Green500 else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
-            fontWeight = if (row.isToday) FontWeight.Bold else FontWeight.Medium
-        )
-        if (row.isToday) {
-            Spacer(Modifier.width(6.dp))
-            Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = Green500.copy(alpha = 0.15f)
-            ) {
-                Text(
-                    "今天", fontSize = 11.sp, color = Green500,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun TimelineCard(
     event: Event,
     onClick: () -> Unit,
     onPhotoClick: (() -> Unit)?
 ) {
     val hasPhoto = !event.photoUri.isNullOrBlank()
+    // 宽屏（折叠屏内屏展开/平板）：左文右图横排，图宽 1/3；窄屏：上文下图竖排。
+    // 宽屏文字列均从最左开始，有图/无图天然对齐，无需占位块。
+    val wide = isWideScreen()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
+        // 方案 B：白底+1dp 描边区分卡片边界（方案 A 为浅灰底色块对比）
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        if (hasPhoto) {
-            StaggeredPhoto(uri = Uri.parse(event.photoUri), onClick = onPhotoClick)
-        }
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(
-                text = TimeUtil.formatTime(event.createdAt),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            if (!event.address.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.LocationOn, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(13.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(event.address, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (wide) {
+            Row {
+                Column(modifier = Modifier.weight(1f).padding(10.dp)) {
+                    CardTexts(event)
+                }
+                if (hasPhoto) {
+                    // 照片与卡片边缘留 10dp 间隔（与文字区一致），不贴合
+                    Box(
+                        Modifier.padding(top = 10.dp, end = 10.dp, bottom = 10.dp)
+                    ) {
+                        WideCardPhoto(uri = Uri.parse(event.photoUri), onClick = onPhotoClick)
+                    }
                 }
             }
-
-            if (event.audioDuration != null && event.audioDuration > 0) {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Mic, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(13.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("${event.audioDuration / 1000}秒",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        fontSize = 12.sp)
-                }
+        } else {
+            Column(modifier = Modifier.padding(10.dp)) {
+                CardTexts(event)
             }
-
-            if (!event.note.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(event.note, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-
-            if (!event.label.isNullOrBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            if (hasPhoto) {
+                // 照片不贴边：左右下 10dp（顶部由文字区 padding 提供间隔）
+                Box(
+                    Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)
                 ) {
-                    Text(event.label, fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        maxLines = 1)
+                    StaggeredPhoto(uri = Uri.parse(event.photoUri), onClick = onPhotoClick)
                 }
+            }
+        }
+    }
+}
+
+/** 卡片文字区：时间+日期/地点/音频/备注/主题标签（宽窄屏共用；日期随卡片显示） */
+@Composable
+private fun CardTexts(event: Event) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = TimeUtil.formatTime(event.createdAt),
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.alignByBaseline()
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = TimeUtil.formatCardDate(event.createdAt),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            maxLines = 1,
+            modifier = Modifier.alignByBaseline()
+        )
+    }
+
+    if (!event.address.isNullOrBlank()) {
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.LocationOn, null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(event.address, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+
+    if (event.audioDuration != null && event.audioDuration > 0) {
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Mic, null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("${event.audioDuration / 1000}秒",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                fontSize = 12.sp)
+        }
+    }
+
+    if (!event.note.isNullOrBlank()) {
+        Spacer(Modifier.height(4.dp))
+        Text(event.note, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+
+    if (!event.label.isNullOrBlank()) {
+        Spacer(Modifier.height(6.dp))
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        ) {
+            Text(event.label, fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                maxLines = 1)
+        }
+    }
+}
+
+/**
+ * 宽屏横排卡片的右侧图片块：宽度 = 卡片宽 1/3，高度按图片宽高比自适应（100~180dp），
+ * 裁切填充。点击放大查看（onPhotoClick），与竖排 StaggeredPhoto 行为一致。
+ */
+@Composable
+private fun WideCardPhoto(uri: Uri, onClick: (() -> Unit)?) {
+    val context = LocalContext.current
+    val bitmap by produceState<android.graphics.Bitmap?>(null, uri) {
+        value = loadBitmap(context, uri, 700)
+    }
+    val aspect = remember(bitmap) {
+        bitmap?.let {
+            (it.width.toFloat() / it.height.toFloat()).coerceIn(0.6f, 1.8f)
+        } ?: 0.8f
+    }
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth(1f / 3f)
+            .let { if (onClick != null) it.clickable { onClick() } else it }
+    ) {
+        val h = (maxWidth / aspect).coerceIn(100.dp, 180.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(h)
+                .clip(RoundedCornerShape(10.dp))
+                .let { if (onClick != null) it.clickable { onClick() } else it }
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+            }
+        }
+        if (onClick != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                    .padding(3.dp)
+            ) {
+                Icon(Icons.Outlined.ZoomIn, contentDescription = null,
+                    tint = Color.White, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -691,6 +756,7 @@ private fun StaggeredPhoto(uri: Uri, onClick: (() -> Unit)?) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(h)
+                .clip(RoundedCornerShape(10.dp))
                 .let { if (onClick != null) it.clickable { onClick() } else it }
         ) {
             if (bitmap != null) {

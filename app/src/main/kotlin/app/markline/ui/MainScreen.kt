@@ -229,7 +229,7 @@ fun MainScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 32.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -276,6 +276,7 @@ fun MainScreen(
                 onClick = { requestPhotoCheckin() },
                 enabled = !isProcessing,
                 modifier = Modifier
+                    .widthIn(max = 360.dp)
                     .fillMaxWidth()
                     .padding(horizontal = 64.dp)
                     .height(48.dp),

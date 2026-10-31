@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -91,16 +92,21 @@ fun EventDetailScreen(
     // 定位状态
     var isLocating by remember { mutableStateOf(false) }
 
-    // 备注编辑状态
-    var isEditingNote by remember { mutableStateOf(false) }
-    var noteText by remember { mutableStateOf("") }
+    // 备注编辑状态（可保存：折叠/展开重建后不丢）
+    var isEditingNote by rememberSaveable { mutableStateOf(false) }
+    var noteText by rememberSaveable { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
 
     // 主题标签编辑状态
-    var isEditingLabel by remember { mutableStateOf(false) }
-    var labelText by remember { mutableStateOf("") }
+    var isEditingLabel by rememberSaveable { mutableStateOf(false) }
+    var labelText by rememberSaveable { mutableStateOf("") }
     val existingLabels = remember { mutableStateListOf<String>() }
+
+    // 地址内联编辑状态（2026-10-31 拍板：仅地址可编辑、不可清空；坐标保持 Append-only）
+    // 手动标记落库（event.address_manual），进程死亡/换机/云同步均不丢
+    var showAddrEditor by rememberSaveable { mutableStateOf(false) }
+    var manualAddrText by rememberSaveable { mutableStateOf("") }
 
     // 权限申请
     val permLauncher = rememberLauncherForActivityResult(
@@ -208,11 +214,12 @@ fun EventDetailScreen(
         }
     ) { padding ->
 
+        AdaptiveScreen {
         if (event == null) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Green500)
             }
-            return@Scaffold
+            return@AdaptiveScreen
         }
 
         val ev = event!!
@@ -222,7 +229,7 @@ fun EventDetailScreen(
         var isResolvingAddress by remember { mutableStateOf(false) }
         var driftAttempted by remember { mutableStateOf(false) }
         LaunchedEffect(ev.id, ev.address) {
-            if (!isResolvingAddress && !driftAttempted &&
+            if (!isResolvingAddress && !driftAttempted && !ev.addressManual &&
                 ev.latitude != null && ev.longitude != null &&
                 (ev.address == null || looksCoarseAddress(ev.address))
             ) {
@@ -245,8 +252,7 @@ fun EventDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(scrollState) // 使用外部定义的 scrollState
-        ) {
-            Text(
+        ) {            Text(
                 text = TimeUtil.formatDateTime(ev.createdAt),
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp,
@@ -382,7 +388,28 @@ fun EventDetailScreen(
                         isResolvingAddress -> "地址解析中…"
                         else -> "（未能解析详细地址）"
                     }
-                    Text(text = addrText, style = MaterialTheme.typography.bodyLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = addrText,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // 内联编辑入口：预填自动解析地址，改完即存（仅地址，坐标不动）
+                        IconButton(
+                            onClick = {
+                                manualAddrText = ev.address ?: ""
+                                showAddrEditor = true
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Edit,
+                                contentDescription = "编辑地址",
+                                tint = Green500,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                     Text(text = "${ev.latitude}, ${ev.longitude}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -458,6 +485,8 @@ fun EventDetailScreen(
                         modifier = Modifier.clickable { photoPicker.launch(arrayOf("image/*")) }
                     )
                 } else {
+                    // 宽屏（折叠屏内屏/平板）画廊缩略图放大，单屏可容纳更多照片
+                    val thumbSize = if (isWideScreen()) 140.dp else 100.dp
                     Row(
                         modifier = Modifier
                             .horizontalScroll(rememberScrollState())
@@ -468,7 +497,7 @@ fun EventDetailScreen(
                             Box(contentAlignment = Alignment.TopEnd) {
                                 PhotoThumbnail(
                                     uri = Uri.parse(p.photoUri),
-                                    size = 100.dp,
+                                    size = thumbSize,
                                     onClick = { showFullPhoto = Uri.parse(p.photoUri) }
                                 )
                                 IconButton(
@@ -494,7 +523,7 @@ fun EventDetailScreen(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(100.dp)
+                                .size(thumbSize)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { photoPicker.launch(arrayOf("image/*")) }
@@ -662,6 +691,66 @@ fun EventDetailScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
 
+        // ── 地址内联编辑：预填自动解析地址，可修改/清空后保存 ──
+        if (showAddrEditor) {
+            AlertDialog(
+                onDismissRequest = { showAddrEditor = false },
+                title = { Text("编辑地址") },
+                text = {
+                    Column {
+                        Text(
+                            "自动解析的地址可能不精确，可直接修改后保存；坐标不会修改",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = manualAddrText,
+                            onValueChange = { manualAddrText = it },
+                            label = { Text("地址") },
+                            placeholder = { Text("如：北京市朝阳区XX路XX号") },
+                            supportingText = {
+                                if (manualAddrText.isBlank()) {
+                                    Text("地址不能为空", color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Green500,
+                                focusedLabelColor = Green500,
+                                cursorColor = Green500
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                eventStore.updateEnhancement(
+                                    id = eventId,
+                                    address = manualAddrText.trim(),
+                                    // 手动标记落库：永久阻断自动重解析覆盖（DB v9）
+                                    addressManual = true
+                                )
+                                refreshTick++
+                                SyncWorker.onDataChanged(context)
+                            }
+                            showAddrEditor = false
+                        },
+                        // 不允许清空地址：空文本时保存禁用
+                        enabled = manualAddrText.isNotBlank()
+                    ) {
+                        Text("保存", color = Green500, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddrEditor = false }) { Text("取消") }
+                }
+            )
+        }
+
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
@@ -682,6 +771,7 @@ fun EventDetailScreen(
         if (showFullPhoto != null) {
             FullPhotoDialog(uri = showFullPhoto) { showFullPhoto = null }
         }
+        } // AdaptiveScreen
     }
 }
 

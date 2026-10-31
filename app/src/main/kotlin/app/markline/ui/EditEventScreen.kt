@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -62,13 +63,13 @@ fun EditEventScreen(
         value = eventStore.findById(eventId)
     }
 
-    // 编辑状态
-    var noteText   by remember { mutableStateOf("") }
-    var addrText   by remember { mutableStateOf("") }
-    var newLat     by remember { mutableStateOf<Double?>(null) }
-    var newLng     by remember { mutableStateOf<Double?>(null) }
-    var newAudio   by remember { mutableStateOf<String?>(null) }
-    var newAudioDur by remember { mutableStateOf<Int?>(null) }
+    // 编辑状态（可保存：折叠/展开重建后不丢）
+    var noteText   by rememberSaveable { mutableStateOf("") }
+    var addrText   by rememberSaveable { mutableStateOf("") }
+    var newLat     by rememberSaveable { mutableStateOf<Double?>(null) }
+    var newLng     by rememberSaveable { mutableStateOf<Double?>(null) }
+    var newAudio   by rememberSaveable { mutableStateOf<String?>(null) }
+    var newAudioDur by rememberSaveable { mutableStateOf<Int?>(null) }
 
     // UI 状态
     var isLocating  by remember { mutableStateOf(false) }
@@ -180,6 +181,7 @@ fun EditEventScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
+        AdaptiveScreen {
         if (event == null) {
             Box(
                 Modifier.fillMaxSize().padding(padding),
@@ -187,7 +189,7 @@ fun EditEventScreen(
             ) {
                 CircularProgressIndicator(color = Green500)
             }
-            return@Scaffold
+            return@AdaptiveScreen
         }
 
         val ev = event!!
@@ -488,6 +490,7 @@ fun EditEventScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+        } // AdaptiveScreen
     }
 }
 
@@ -520,10 +523,12 @@ private suspend fun saveChanges(
             address   = addrText.ifBlank { null }
         )
     } else if (addrText.isNotBlank()) {
-        // 仅更新地址文本（不覆盖坐标）
+        // 仅更新地址文本（不覆盖坐标）；用户手动编辑 → 落 manual 标记，
+        // 详情页自动重解析不再覆盖（DB v9 address_manual）
         eventStore.updateEnhancement(
             id      = eventId,
-            address = addrText.trim()
+            address = addrText.trim(),
+            addressManual = true
         )
     }
 

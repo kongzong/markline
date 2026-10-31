@@ -27,6 +27,9 @@ data class Event(
     /** 逆地理编码地址，解析失败时为 null */
     val address: String? = null,
 
+    /** 地址是否为用户手动编辑过：true 则详情页不再自动重解析覆盖（防数据损失） */
+    val addressManual: Boolean = false,
+
     /** 录音文件名（不含路径），录音失败或未启用时为 null */
     val audioFileName: String? = null,
 

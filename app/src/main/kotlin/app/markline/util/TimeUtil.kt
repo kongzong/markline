@@ -8,6 +8,7 @@ object TimeUtil {
 
     private val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val dateFormatter = SimpleDateFormat("M月d日", Locale.getDefault())
+    private val cardDateFormatter = SimpleDateFormat("M月d日E", Locale.CHINA)
     private val fullFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     private val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -36,6 +37,20 @@ object TimeUtil {
                 val yesterday = toDayKey(System.currentTimeMillis() - 86400_000L)
                 if (targetKey == yesterday) "昨天" else formatDate(millis)
             }
+        }
+    }
+
+    /**
+     * 卡片内日期标签（2026-10-31 日期分组移除后改为随卡片显示）：
+     * 今天/昨天 → "今天 · 10月31日周六"；更早 → "10月28日周五"
+     */
+    fun formatCardDate(millis: Long): String {
+        val dateLabel = cardDateFormatter.format(Date(millis))
+        val targetKey = toDayKey(millis)
+        return when (targetKey) {
+            toDayKey(System.currentTimeMillis()) -> "今天 · $dateLabel"
+            toDayKey(System.currentTimeMillis() - 86400_000L) -> "昨天 · $dateLabel"
+            else -> dateLabel
         }
     }
 }

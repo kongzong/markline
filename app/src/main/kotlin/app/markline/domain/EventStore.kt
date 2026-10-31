@@ -18,6 +18,8 @@ interface EventStore {
         latitude: Double? = null,
         longitude: Double? = null,
         address: String? = null,
+        /** 地址是否手动编辑：true 落库后永久阻断自动重解析覆盖；null = 不改变原标记 */
+        addressManual: Boolean? = null,
         audioFileName: String? = null,
         audioDuration: Int? = null,
         status: Int? = null

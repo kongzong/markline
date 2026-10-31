@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -167,59 +168,54 @@ private fun AppNavigation(
         }
     }
 
-    Scaffold(
-        modifier     = Modifier.fillMaxSize(),
-        bottomBar    = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    tonalElevation = androidx.compose.ui.unit.Dp.Unspecified
-                ) {
-                    bottomTabs.forEach { tab ->
-                        val selected = currentRoute == tab.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick  = {
-                                if (!selected) {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(Routes.HOME) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState    = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                    contentDescription = tab.label
-                                )
-                            },
-                            label = { 
-                                Text(
-                                    text = tab.label, 
-                                    fontSize = 11.sp,
-                                    color = if (selected) MaterialTheme.colorScheme.primary 
-                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                ) 
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor   = MaterialTheme.colorScheme.primary,
-                                selectedTextColor   = MaterialTheme.colorScheme.primary,
-                                indicatorColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        )
-                    }
-                }
+    // 导航项点击
+    fun navigateToTab(tab: BottomTab) {
+        if (currentRoute != tab.route) {
+            navController.navigate(tab.route) {
+                popUpTo(Routes.HOME) { saveState = true }
+                launchSingleTop = true
+                restoreState    = true
             }
         }
-    ) { innerPadding ->
+    }
 
+    // 窄屏底栏项（NavigationBarItem 是 RowScope 扩展，必须在 NavigationBar 内容内调用）
+    val barTabs: @Composable RowScope.() -> Unit = {
+        bottomTabs.forEach { tab ->
+            val selected = currentRoute == tab.route
+            NavigationBarItem(
+                selected = selected,
+                onClick  = { navigateToTab(tab) },
+                icon = {
+                    Icon(
+                        if (selected) tab.selectedIcon else tab.unselectedIcon,
+                        contentDescription = tab.label
+                    )
+                },
+                label = {
+                    Text(
+                        text = tab.label,
+                        fontSize = 11.sp,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor   = MaterialTheme.colorScheme.primary,
+                    selectedTextColor   = MaterialTheme.colorScheme.primary,
+                    indicatorColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            )
+        }
+    }
+
+    val navHost: @Composable (Modifier) -> Unit = { m ->
         NavHost(
             navController    = navController,
             startDestination = Routes.HOME,
-            modifier         = Modifier.padding(innerPadding)
+            modifier         = m
         ) {
             composable(Routes.HOME) {
                 MainScreen(
@@ -289,5 +285,22 @@ private fun AppNavigation(
                 )
             }
         }
+    }
+
+    // 宽屏/窄屏统一用底部 NavigationBar（实测宽屏 Rail 不好看也不好点，2026-10-31 回归底栏）
+    Scaffold(
+        modifier  = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    tonalElevation = androidx.compose.ui.unit.Dp.Unspecified
+                ) {
+                    barTabs()
+                }
+            }
+        }
+    ) { innerPadding ->
+        navHost(Modifier.padding(innerPadding))
     }
 }

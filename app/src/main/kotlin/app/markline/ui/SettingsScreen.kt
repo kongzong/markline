@@ -132,6 +132,7 @@ fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
+        AdaptiveScreen {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -409,6 +410,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
         }
+        } // AdaptiveScreen
     }
 
     // ── 对话框 ──────────────────────────────────────────

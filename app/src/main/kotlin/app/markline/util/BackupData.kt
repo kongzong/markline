@@ -43,6 +43,10 @@ data class EventJson(
     @SerializedName("address")
     val address: String?,
 
+    /** 地址是否用户手动编辑过（true 则不参与自动重解析覆盖） */
+    @SerializedName("addressManual")
+    val addressManual: Boolean = false,
+
     @SerializedName("audioFileName")
     val audioFileName: String?,
 

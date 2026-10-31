@@ -14,7 +14,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "markline.db"
-        const val DATABASE_VERSION = 8
+        const val DATABASE_VERSION = 9
 
         // 表名
         const val TABLE_EVENT = "event"
@@ -27,6 +27,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
         const val COL_LATITUDE = "latitude"
         const val COL_LONGITUDE = "longitude"
         const val COL_ADDRESS = "address"
+        const val COL_ADDRESS_MANUAL = "address_manual"
         const val COL_AUDIO_FILE_NAME = "audio_file_name"
         const val COL_AUDIO_DURATION = "audio_duration"
         const val COL_NOTE = "note"
@@ -58,6 +59,7 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
                 $COL_LATITUDE      REAL,
                 $COL_LONGITUDE     REAL,
                 $COL_ADDRESS       TEXT,
+                $COL_ADDRESS_MANUAL INTEGER NOT NULL DEFAULT 0,
                 $COL_AUDIO_FILE_NAME    TEXT,
                 $COL_AUDIO_DURATION INTEGER,
                 $COL_NOTE          TEXT,
@@ -173,6 +175,10 @@ class DBHelper(context: Context) : SQLiteOpenHelper(
             db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_UPDATED_AT INTEGER")
             db.execSQL("UPDATE $TABLE_EVENT SET $COL_UPDATED_AT = $COL_CREATED_AT WHERE $COL_UPDATED_AT IS NULL")
             createSyncTombstoneTable(db)
+        }
+        if (oldVersion < 9) {
+            // v8 → v9: address_manual（地址手动编辑标记，落库后永久阻断自动重解析覆盖）
+            db.execSQL("ALTER TABLE $TABLE_EVENT ADD COLUMN $COL_ADDRESS_MANUAL INTEGER NOT NULL DEFAULT 0")
         }
     }
 

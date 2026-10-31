@@ -45,6 +45,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
             event.latitude?.let { put(DBHelper.COL_LATITUDE, it) }
             event.longitude?.let { put(DBHelper.COL_LONGITUDE, it) }
             event.address?.let { put(DBHelper.COL_ADDRESS, it) }
+            put(DBHelper.COL_ADDRESS_MANUAL, if (event.addressManual) 1 else 0)
             event.audioFileName?.let { put(DBHelper.COL_AUDIO_FILE_NAME, it) }
             event.audioDuration?.let { put(DBHelper.COL_AUDIO_DURATION, it) }
             event.note?.let { put(DBHelper.COL_NOTE, it) }
@@ -63,6 +64,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
         latitude: Double?,
         longitude: Double?,
         address: String?,
+        addressManual: Boolean?,
         audioFileName: String?,
         audioDuration: Int?,
         status: Int?
@@ -72,6 +74,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
         latitude?.let { values.put(DBHelper.COL_LATITUDE, it) }
         longitude?.let { values.put(DBHelper.COL_LONGITUDE, it) }
         address?.let { values.put(DBHelper.COL_ADDRESS, it) }
+        addressManual?.let { values.put(DBHelper.COL_ADDRESS_MANUAL, if (it) 1 else 0) }
         audioFileName?.let { values.put(DBHelper.COL_AUDIO_FILE_NAME, it) }
         audioDuration?.let { values.put(DBHelper.COL_AUDIO_DURATION, it) }
         status?.let { values.put(DBHelper.COL_STATUS, it) }
@@ -324,6 +327,7 @@ class SQLiteEventStore(private val context: Context) : EventStore {
                 put(DBHelper.COL_LATITUDE, event.latitude)
                 put(DBHelper.COL_LONGITUDE, event.longitude)
                 put(DBHelper.COL_ADDRESS, event.address)
+                put(DBHelper.COL_ADDRESS_MANUAL, if (event.addressManual) 1 else 0)
                 put(DBHelper.COL_AUDIO_FILE_NAME, event.audioFileName)
                 put(DBHelper.COL_AUDIO_DURATION, event.audioDuration)
                 put(DBHelper.COL_NOTE, event.note)
@@ -587,6 +591,8 @@ class SQLiteEventStore(private val context: Context) : EventStore {
             longitude = if (isNull(colInt(DBHelper.COL_LONGITUDE))) null
                         else getDouble(colInt(DBHelper.COL_LONGITUDE)),
             address = getString(colInt(DBHelper.COL_ADDRESS)),
+            addressManual = !isNull(colInt(DBHelper.COL_ADDRESS_MANUAL)) &&
+                            getInt(colInt(DBHelper.COL_ADDRESS_MANUAL)) == 1,
             audioFileName = getString(colInt(DBHelper.COL_AUDIO_FILE_NAME)),
             audioDuration = if (isNull(colInt(DBHelper.COL_AUDIO_DURATION))) null
                             else getInt(colInt(DBHelper.COL_AUDIO_DURATION)),
